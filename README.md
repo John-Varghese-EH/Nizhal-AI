@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Nizhal AI Logo](assets/logo.png)
+![Nizhal AI Logo](/assets/icon.png)
 
 # Nizhal AI - Your Desktop Companion
 
@@ -42,10 +42,10 @@ this adorable AI companion stays by your side on your desktop!
 - **Goku** - The Saiyan Warrior
 - **Elsa** - The Snow Queen
 - **Nanban** - Tamil friend with Tanglish (Tamil-English)
-- **Sneham** - Telugu friend with Tenglish (Telugu-English)
+- **Sneha** - Telugu friend with Tenglish (Telugu-English)
 - **Dost** - Hindi friend with Hinglish (Hindi-English)
 
-### 🧠 Emotional Intelligence (Bella-III Logic)
+### 🧠 Emotional Intelligence (Advanced Logic)
 - **Affection, Trust, Professionalism** tracking
 - **Mood system**: Happy, Neutral, Concerned, Protective, Playful, Thoughtful
 - Dynamic personality that evolves with your interactions
@@ -57,12 +57,11 @@ this adorable AI companion stays by your side on your desktop!
 
 ### 🛒 Persona Marketplace
 - Purchase premium personas and voice packs
-- Razorpay (India) and Stripe (International) payment integration
 - License validation and management
 
 ### 🤖 AI & Voice
-- **Free Tier**: Ollama local inference
-- **Pro Tier**: Gemini 1.5 Flash cloud inference
+- **Local(Privacy)**: Ollama local inference
+- **Cloud(low-end devices)**: Gemini, OpenAI, 
 - **Voice**: Web Speech API + ElevenLabs premium voices
 
 ### 🔧 System Control (Jarvis Mode)
@@ -215,8 +214,8 @@ Configure in Settings → API Keys:
 
 | Service | Purpose | Required |
 |---------|---------|----------|
-| Gemini API | Cloud AI inference | Optional (Pro) |
-| ElevenLabs | Premium voice synthesis | Optional (Pro) |
+| Gemini API | Cloud AI inference | Optional |
+| ElevenLabs | Premium voice synthesis | Optional |
 
 ## Free Hatsune Miku Support
 
@@ -240,15 +239,6 @@ npm run build:win
 npm run build:mac
 npm run build:linux
 ```
-
----
-
-## 📦 Distribution
-
-See [DEPLOYMENT.md](DEPLOYMENT.md) for complete instructions on:
-- Code signing for Windows and macOS
-- Auto-update configuration
-- Store submission (Microsoft Store, Mac App Store)
 
 ---
 
@@ -277,5 +267,5 @@ This project is licensed - see the [LICENSE](LICENSE) file for details.
 ---
 
 <div align="center">
-<strong>Built with ❤️ for the AI companion community</strong>
+<strong>Built with ❤️ by [J0X](https://github.com/John-Varghese-EH/) for the AI companion community</strong>
 </div>
