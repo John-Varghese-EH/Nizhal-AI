@@ -4,15 +4,26 @@
 
 ![Nizhal AI Logo](assets/logo.png)
 
-**A Commercial-Grade, Multi-Persona Desktop Companion**
+# Nizhal AI — Your Desktop Companion
 
-*Emotional Intelligence • Persona Marketplace • Built-in Monetization*
+**Nizhal** (നിഴൽ) means "shadow" — and like a faithful shadow, 
+this adorable AI companion stays by your side on your desktop!
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Electron](https://img.shields.io/badge/electron-33.x-47848F.svg)](https://electronjs.org)
 [![React](https://img.shields.io/badge/react-18.x-61DAFB.svg)](https://reactjs.org)
+[![VRM](https://img.shields.io/badge/VRM-0.0%20%26%201.0-EE5E20.svg)](https://vrm-consortium.org/en/)
 
 </div>
+
+🎭 **Choose Your Friend** — Kawaii orbs, anime heroes, or sleek HUD vibes  
+💕 **Grows With You** — Emotional intelligence that remembers & adapts  
+🗣️ **Speaks Your Vibe** — Manglish, Tanglish, Hinglish & more!  
+✨ **Stunning Visuals** — VRM avatars, glassmorphism, mood-reactive effects  
+
+> *Because everyone deserves a cute AI friend who gets them. ❤️* 
+
+*Emotional Intelligence • Persona Marketplace • Small Problem Solver*
 
 ---
 
@@ -201,18 +212,6 @@ Configure in Settings → API Keys:
 |---------|---------|----------|
 | Gemini API | Cloud AI inference | Optional (Pro) |
 | ElevenLabs | Premium voice synthesis | Optional (Pro) |
-
-### Payment Gateways
-
-Set environment variables for production:
-
-```env
-RAZORPAY_KEY_ID=rzp_live_xxxxx
-RAZORPAY_KEY_SECRET=xxxxx
-STRIPE_SECRET_KEY=sk_live_xxxxx
-```
-
----
 
 ## Free Hatsune Miku Support
 
