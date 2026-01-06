@@ -4,9 +4,9 @@
 
 ![Nizhal AI Logo](assets/logo.png)
 
-# Nizhal AI — Your Desktop Companion
+# Nizhal AI - Your Desktop Companion
 
-**Nizhal** (നിഴൽ) means "shadow" — and like a faithful shadow, 
+**Nizhal** (നിഴൽ) means "shadow" - and like a faithful shadow, 
 this adorable AI companion stays by your side on your desktop!
 
 [![License](https://img.shields.io/badge/license-Source%20Available-yellow.svg)](/LICENSE)
@@ -16,29 +16,34 @@ this adorable AI companion stays by your side on your desktop!
 
 </div>
 
-🎭 **Choose Your Friend** — Kawaii orbs, anime heroes, or sleek HUD vibes  
-💕 **Grows With You** — Emotional intelligence that remembers & adapts  
-🗣️ **Speaks Your Vibe** — Manglish, Tanglish, Hinglish & more!  
-✨ **Stunning Visuals** — VRM avatars, glassmorphism, mood-reactive effects  
+🎭 **Choose Your Friend** - Kawaii orbs, anime heroes, or sleek HUD vibes  
+💕 **Grows With You** - Emotional intelligence that remembers & adapts  
+🗣️ **Speaks Your Vibe** - Manglish, Tanglish, Hinglish & more!  
+✨ **Stunning Visuals** - VRM avatars, glassmorphism, mood-reactive effects  
 
 > *Because everyone deserves a cute AI friend who gets them. ❤️* 
 
 *Emotional Intelligence • Persona Marketplace • Small Problem Solver*
+
+> [!NOTE]
+> **🚧 Work in Progress:**  
+> Nizhal AI is still evolving! Help make it better and faster-contributions, feedback, and ideas are warmly welcome.  
+> *Star the repo and join the project!*
 
 ---
 
 ## ✨ Features
 
 ### 🎭 Multi-Persona System
-- **Jarvis** – Technical, protective, formal AI assistant
-- **Kavya** – Caring female friend (Authentic Kerala Manglish)
-- **Arjun** – Reliable male friend (Authentic Kerala Manglish)
-- **Naruto** – The energetic Ninja
-- **Goku** – The Saiyan Warrior
-- **Elsa** – The Snow Queen
-- **Nanban** – Tamil friend with Tanglish (Tamil-English)
-- **Sneham** – Telugu friend with Tenglish (Telugu-English)
-- **Dost** – Hindi friend with Hinglish (Hindi-English)
+- **Jarvis** - Technical, protective, formal AI assistant
+- **Kavya** - Caring female friend (Authentic Kerala Manglish)
+- **Arjun** - Reliable male friend (Authentic Kerala Manglish)
+- **Naruto** - The energetic Ninja
+- **Goku** - The Saiyan Warrior
+- **Elsa** - The Snow Queen
+- **Nanban** - Tamil friend with Tanglish (Tamil-English)
+- **Sneham** - Telugu friend with Tenglish (Telugu-English)
+- **Dost** - Hindi friend with Hinglish (Hindi-English)
 
 ### 🧠 Emotional Intelligence (Bella-III Logic)
 - **Affection, Trust, Professionalism** tracking
@@ -138,7 +143,7 @@ ollama pull mistral       # 7B parameters, faster
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/nizhal-ai.git
+git clone https://github.com/John-Varghese-EH/Nizhal-AI.git
 cd nizhal-ai
 
 # Install dependencies
@@ -259,19 +264,15 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for complete instructions on:
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed - see the [LICENSE](LICENSE) file for details.
 
 ---
 
 ## 💝 Support
 
-<a href="https://www.buymeacoffee.com/nizhalai">
-  <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee">
-</a>
-
-<a href="https://patreon.com/nizhalai">
-  <img src="https://img.shields.io/badge/Patreon-F96854?style=for-the-badge&logo=patreon&logoColor=white" alt="Patreon">
-</a>
+[![Buy me a Coffee](https://img.shields.io/badge/Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/CyberTrinity)
+[![Patreon](https://img.shields.io/badge/Patreon-F96854?style=for-the-badge&logo=patreon&logoColor=white)](https://patreon.com/CyberTrinity)
+[![Sponsor](https://img.shields.io/badge/sponsor-30363D?style=for-the-badge&logo=GitHub-Sponsors&logoColor=#white)](https://github.com/sponsors/John-Varghese-EH)
 
 ---
 
