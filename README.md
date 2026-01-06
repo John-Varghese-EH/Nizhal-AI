@@ -267,5 +267,7 @@ This project is licensed - see the [LICENSE](LICENSE) file for details.
 ---
 
 <div align="center">
+  
 <strong>Built with ❤️ by [J0X](https://github.com/John-Varghese-EH/) for the AI companion community</strong>
+
 </div>
