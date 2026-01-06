@@ -1,0 +1,281 @@
+# Nizhal AI
+
+<div align="center">
+
+![Nizhal AI Logo](assets/logo.png)
+
+**A Commercial-Grade, Multi-Persona Desktop Companion**
+
+*Emotional Intelligence • Persona Marketplace • Built-in Monetization*
+
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Electron](https://img.shields.io/badge/electron-33.x-47848F.svg)](https://electronjs.org)
+[![React](https://img.shields.io/badge/react-18.x-61DAFB.svg)](https://reactjs.org)
+
+</div>
+
+---
+
+## ✨ Features
+
+### 🎭 Multi-Persona System
+- **Jarvis** – Technical, protective, formal AI assistant
+- **Kavya** – Caring female friend (Authentic Kerala Manglish)
+- **Arjun** – Reliable male friend (Authentic Kerala Manglish)
+- **Naruto** – The energetic Ninja
+- **Goku** – The Saiyan Warrior
+- **Elsa** – The Snow Queen
+- **Nanban** – Tamil friend with Tanglish (Tamil-English)
+- **Sneham** – Telugu friend with Tenglish (Telugu-English)
+- **Dost** – Hindi friend with Hinglish (Hindi-English)
+
+### 🧠 Emotional Intelligence (Bella-III Logic)
+- **Affection, Trust, Professionalism** tracking
+- **Mood system**: Happy, Neutral, Concerned, Protective, Playful, Thoughtful
+- Dynamic personality that evolves with your interactions
+
+### 💎 Premium Visuals
+- **Jarvis HUD** – Three.js animated holographic interface
+- **Companion Orb** – Mood-reactive morphing orb visualization
+- Glassmorphism UI with Framer Motion animations
+
+### 🛒 Persona Marketplace
+- Purchase premium personas and voice packs
+- Razorpay (India) and Stripe (International) payment integration
+- License validation and management
+
+### 🤖 AI & Voice
+- **Free Tier**: Ollama local inference
+- **Pro Tier**: Gemini 1.5 Flash cloud inference
+- **Voice**: Web Speech API + ElevenLabs premium voices
+
+### 🔧 System Control (Jarvis Mode)
+- Volume and brightness control
+- Application launcher
+- Always-on-top transparent overlay with click-through mode
+
+## 🚀 Complete Setup Guide (For Students)
+
+### Prerequisites
+
+Before you begin, install these tools:
+
+#### 1. Install Node.js (v20+)
+
+**Windows:**
+```bash
+# Download and install from nodejs.org, OR use winget:
+winget install OpenJS.NodeJS.LTS
+```
+
+**macOS:**
+```bash
+brew install node
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+Verify installation:
+```bash
+node --version  # Should show v20.x.x or higher
+npm --version   # Should show 10.x.x or higher
+```
+
+---
+
+#### 2. Install Ollama (For Free Local AI)
+
+Ollama lets you run AI models locally for FREE. This is the default inference engine.
+
+**Windows:**
+```bash
+# Download from https://ollama.com/download/windows
+# Or use winget:
+winget install Ollama.Ollama
+```
+
+**macOS:**
+```bash
+brew install ollama
+```
+
+**Linux:**
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+**Start Ollama and download a model:**
+```bash
+# Start the Ollama service
+ollama serve
+
+# In a NEW terminal, pull the recommended model:
+ollama pull llama3        # General purpose (8B parameters)
+# OR for faster responses on low-end hardware:
+ollama pull mistral       # 7B parameters, faster
+```
+
+> ⚠️ **Important**: Ollama must be running (`ollama serve`) before starting Nizhal AI.
+
+---
+
+#### 3. Clone & Run Nizhal AI
+
+```bash
+# Clone the repository
+git clone https://github.com/your-org/nizhal-ai.git
+cd nizhal-ai
+
+# Install dependencies
+npm install
+
+# Start in development mode
+npm run dev
+```
+
+The app will launch as a transparent overlay on your desktop!
+
+---
+
+### Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| "Ollama not responding" | Ensure `ollama serve` is running in a separate terminal |
+| "Module not found" | Run `npm install` again |
+| Blank window | Check DevTools (F12) for errors |
+| Slow responses | Try `ollama pull mistral` for a smaller model |
+
+---
+
+## 📁 Project Structure
+
+```
+nizhal-ai/
+├── main.js                    # Electron main process
+├── preload.js                 # Secure context bridge
+├── src/
+│   ├── electron/
+│   │   ├── windowManager.js   # Click-through, transparency
+│   │   └── bridge.js          # System controls
+│   ├── core/
+│   │   ├── PersonalityCore.js # Emotional state machine
+│   │   ├── PersonaManager.js  # Persona templates & switching
+│   │   └── MemoryService.js   # JSON-RAG memory system
+│   ├── services/
+│   │   ├── AIService.js       # Ollama + Gemini inference
+│   │   ├── VoiceService.js    # TTS (WebSpeech + ElevenLabs)
+│   │   ├── PaymentService.js  # Razorpay + Stripe
+│   │   ├── LicenseService.js  # Encrypted license management
+│   │   └── PersonaMarketplace.js
+│   └── renderer/
+│       ├── App.jsx            # Main React app
+│       ├── components/
+│       │   ├── ChatView.jsx
+│       │   ├── Marketplace.jsx
+│       │   ├── SettingsView.jsx
+│       │   └── skins/
+│       │       ├── JarvisHUD.jsx   # Three.js HUD
+│       │       └── CompanionOrb.jsx
+│       └── styles/
+│           └── globals.css
+├── package.json
+├── vite.config.js
+├── tailwind.config.js
+└── DEPLOYMENT.md
+```
+
+---
+
+## ⚙️ Configuration
+
+### API Keys
+
+Configure in Settings → API Keys:
+
+| Service | Purpose | Required |
+|---------|---------|----------|
+| Gemini API | Cloud AI inference | Optional (Pro) |
+| ElevenLabs | Premium voice synthesis | Optional (Pro) |
+
+### Payment Gateways
+
+Set environment variables for production:
+
+```env
+RAZORPAY_KEY_ID=rzp_live_xxxxx
+RAZORPAY_KEY_SECRET=xxxxx
+STRIPE_SECRET_KEY=sk_live_xxxxx
+```
+
+---
+
+## Free Hatsune Miku Support
+
+Want to try with a free model?  
+[Download Hatsune Miku VRM](https://booth.pm/en/items/3226395)
+
+## 🛠️ Development
+
+```bash
+# Development with hot reload
+npm run dev
+
+# Lint code
+npm run lint
+
+# Build for current platform
+npm run build
+
+# Build for specific platforms
+npm run build:win
+npm run build:mac
+npm run build:linux
+```
+
+---
+
+## 📦 Distribution
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for complete instructions on:
+- Code signing for Windows and macOS
+- Auto-update configuration
+- Store submission (Microsoft Store, Mac App Store)
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 💝 Support
+
+<a href="https://www.buymeacoffee.com/nizhalai">
+  <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee">
+</a>
+
+<a href="https://patreon.com/nizhalai">
+  <img src="https://img.shields.io/badge/Patreon-F96854?style=for-the-badge&logo=patreon&logoColor=white" alt="Patreon">
+</a>
+
+---
+
+<div align="center">
+<strong>Built with ❤️ for the AI companion community</strong>
+</div>

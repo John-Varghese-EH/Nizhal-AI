@@ -1,0 +1,75 @@
+# Nizhal AI License
+
+Copyright (c) 2026 John Varghese. All Rights Reserved.
+
+## Terms and Conditions
+
+### 1. Personal Use License
+Permission is granted, free of charge, to any individual obtaining a copy of this software and associated documentation files (the "Software"), to use, copy, and modify the Software **for personal, non-commercial purposes only**, subject to the following conditions:
+
+### 2. Restrictions
+You MAY NOT:
+- Distribute, sublicense, or sell copies of the Software without explicit written permission from the copyright holder
+- Use the Software or any derivative works for commercial purposes without explicit written permission
+- Remove or alter any copyright notices, license information, or attribution from the Software
+- Claim ownership of the original Software or represent it as your own creation
+- Create derivative works for public distribution without explicit written permission
+
+### 3. Attribution Requirement
+Any permitted use of this Software must:
+- Retain the original copyright notice
+- Provide visible credit to the original author (John Varghese)
+- Include a link to the original repository when applicable
+
+### 4. Modification for Personal Use
+You MAY modify the Software for your own personal use, provided that:
+- Modified versions are not distributed publicly
+- You do not remove or alter attribution to the original author
+- You acknowledge the original work in any private modifications
+
+### 5. Permission Requests
+To request permission for commercial use, distribution, or any use not covered by this license, contact the copyright holder directly.
+
+---
+
+## Third-Party Assets
+
+### VRM Models
+This software may include or reference VRM (Virtual Reality Model) files. These models are subject to their own licenses:
+
+#### Hatsune Miku VRM
+- **Source**: [BOOTH.pm](https://booth.pm/en/items/3226395)
+- **License**: Please refer to the original creator's terms on BOOTH
+- **Usage**: Personal use only; commercial use requires separate permission from the model creator
+- **Credits**: Hatsune Miku is a registered trademark of Crypton Future Media, Inc.
+
+#### Other VRM Models
+Any additional VRM models included in this software:
+- Must be used in accordance with their original creator's license terms
+- Attribution to original creators must be maintained
+- Commercial use requires obtaining appropriate licenses from the respective creators
+
+---
+
+## Disclaimer
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+---
+
+## Summary
+
+| Action | Allowed? |
+|--------|----------|
+| Personal use | ✅ Yes |
+| Modification for personal use | ✅ Yes |
+| Commercial use | ❌ Requires permission |
+| Redistribution | ❌ Requires permission |
+| Creating derivative works for distribution | ❌ Requires permission |
+| Removing attribution | ❌ Never allowed |
+
+---
+
+**Contact**: For licensing inquiries, please contact the copyright holder through the official repository.
