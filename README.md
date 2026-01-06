@@ -9,7 +9,7 @@
 **Nizhal** (നിഴൽ) means "shadow" — and like a faithful shadow, 
 this adorable AI companion stays by your side on your desktop!
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Source%20Available-yellow.svg)](/LICENSE)
 [![Electron](https://img.shields.io/badge/electron-33.x-47848F.svg)](https://electronjs.org)
 [![React](https://img.shields.io/badge/react-18.x-61DAFB.svg)](https://reactjs.org)
 [![VRM](https://img.shields.io/badge/VRM-0.0%20%26%201.0-EE5E20.svg)](https://vrm-consortium.org/en/)
