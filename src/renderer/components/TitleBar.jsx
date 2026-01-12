@@ -1,16 +1,31 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { Shield } from 'lucide-react';
 
-const TitleBar = ({ personaName, clickThrough, onClickThroughToggle }) => {
+const TitleBar = ({ personaName, clickThrough, onClickThroughToggle, onMaximize, privacyMode }) => {
     const handleMinimize = () => window.nizhal?.window.minimize();
-    const handleMaximize = () => window.nizhal?.window.maximize();
+    const handleMaximizeClick = () => {
+        if (onMaximize) {
+            onMaximize();
+        } else {
+            window.nizhal?.window.maximize();
+        }
+    };
     const handleClose = () => window.nizhal?.window.close();
 
     return (
-        <div className="h-10 flex items-center justify-between px-3 drag-region bg-black/20 border-b border-white/5">
-            <div className="flex items-center gap-2 no-drag">
-                <div className="w-3 h-3 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 animate-pulse" />
-                <span className="text-sm font-medium text-white/90">{personaName}</span>
+        <div className="h-12 flex items-center justify-between px-4 drag-region bg-slate-900/50 border-b border-white/5">
+            <div className="flex items-center gap-3 no-drag">
+                <div className={`w-2 h-2 rounded-full ${privacyMode ? 'bg-green-400' : 'bg-cyan-400'} animate-pulse`} />
+                <span className="text-sm font-light tracking-wider text-white">{personaName}</span>
+
+                {/* Privacy Mode Indicator */}
+                {privacyMode && (
+                    <div className="flex items-center gap-1 px-2 py-0.5 bg-green-500/10 border border-green-500/30 rounded-full">
+                        <Shield size={10} className="text-green-400" />
+                        <span className="text-[9px] text-green-400 font-mono">LOCAL</span>
+                    </div>
+                )}
             </div>
 
             <div className="flex items-center gap-1 no-drag">
@@ -18,9 +33,9 @@ const TitleBar = ({ personaName, clickThrough, onClickThroughToggle }) => {
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
                     onClick={onClickThroughToggle}
-                    className={`p-1.5 rounded-md transition-colors ${clickThrough
-                            ? 'bg-indigo-500/30 text-indigo-300'
-                            : 'hover:bg-white/10 text-white/60'
+                    className={`p-1.5 rounded-lg transition-colors ${clickThrough
+                        ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                        : 'hover:bg-white/10 text-slate-400'
                         }`}
                     title={clickThrough ? 'Disable Click-Through' : 'Enable Click-Through'}
                 >
@@ -38,7 +53,8 @@ const TitleBar = ({ personaName, clickThrough, onClickThroughToggle }) => {
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
                     onClick={handleMinimize}
-                    className="p-1.5 rounded-md hover:bg-white/10 text-white/60 hover:text-white"
+                    className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white"
+                    title="Minimize"
                 >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
@@ -48,8 +64,9 @@ const TitleBar = ({ personaName, clickThrough, onClickThroughToggle }) => {
                 <motion.button
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
-                    onClick={handleMaximize}
-                    className="p-1.5 rounded-md hover:bg-white/10 text-white/60 hover:text-white"
+                    onClick={handleMaximizeClick}
+                    className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white"
+                    title="Maximize to full dashboard"
                 >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
@@ -60,7 +77,8 @@ const TitleBar = ({ personaName, clickThrough, onClickThroughToggle }) => {
                     whileHover={{ scale: 1.1, backgroundColor: 'rgba(239, 68, 68, 0.3)' }}
                     whileTap={{ scale: 0.9 }}
                     onClick={handleClose}
-                    className="p-1.5 rounded-md hover:bg-red-500/20 text-white/60 hover:text-red-400"
+                    className="p-1.5 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-400"
+                    title="Close"
                 >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -72,3 +90,4 @@ const TitleBar = ({ personaName, clickThrough, onClickThroughToggle }) => {
 };
 
 export default TitleBar;
+

@@ -27,7 +27,7 @@ export class ExpressionController {
         // Expression queue
         this.expressionQueue = [];
 
-        // Expression mappings
+        // Expression mappings (extended for emotion system)
         this.expressionMap = {
             neutral: { eyes: 'normal', mouth: 'neutral', brows: 'normal' },
             happy: { eyes: 'happy', mouth: 'smile', brows: 'raised' },
@@ -36,7 +36,11 @@ export class ExpressionController {
             scared: { eyes: 'wide', mouth: 'small', brows: 'worried' },
             sleepy: { eyes: 'closed', mouth: 'neutral', brows: 'relaxed' },
             excited: { eyes: 'sparkle', mouth: 'grin', brows: 'raised' },
-            thinking: { eyes: 'look_up', mouth: 'hmm', brows: 'raised' }
+            thinking: { eyes: 'look_up', mouth: 'hmm', brows: 'raised' },
+            // New emotions for AI personality modes
+            sad: { eyes: 'down', mouth: 'frown', brows: 'worried' },
+            concerned: { eyes: 'soft', mouth: 'slight_frown', brows: 'worried' },
+            playful: { eyes: 'wink', mouth: 'smirk', brows: 'raised' }
         };
     }
 
@@ -162,10 +166,11 @@ export class ExpressionController {
     }
 
     /**
-     * Trigger expression for specific events
+     * Trigger expression for specific events (extended for emotion system)
      */
     onEvent(event) {
         switch (event) {
+            // Interaction events
             case 'pickup':
                 this.setExpression('surprised', 1.0, 500);
                 break;
@@ -184,12 +189,37 @@ export class ExpressionController {
             case 'sit':
                 this.setExpression('neutral', 0.5, 0);
                 break;
+            // AI state events
             case 'thinking':
                 this.setExpression('thinking', 0.8, 0);
                 break;
             case 'speaking':
                 this.setExpression('happy', 0.5, 0);
                 break;
+            // Emotion events (from NizhalAI / QuickMenu)
+            case 'happy':
+                this.setExpression('happy', 0.9, 5000);
+                break;
+            case 'sad':
+                this.setExpression('sad', 0.7, 5000);
+                break;
+            case 'excited':
+                this.setExpression('excited', 1.0, 5000);
+                break;
+            case 'concerned':
+                this.setExpression('concerned', 0.6, 5000);
+                break;
+            case 'playful':
+                this.setExpression('playful', 0.8, 5000);
+                break;
+            case 'neutral':
+                this.fadeToNeutral();
+                break;
+            default:
+                // Try to set as expression directly if it exists in the map
+                if (this.expressionMap[event]) {
+                    this.setExpression(event, 0.8, 5000);
+                }
         }
     }
 

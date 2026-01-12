@@ -11,6 +11,7 @@ export const AvatarState = {
     IDLE: 'idle',
     DRAGGING: 'dragging',
     SITTING: 'sitting',
+    SITTING_WINDOW: 'sitting_window',
     SITTING_TASKBAR: 'sitting_taskbar',
     DANCING: 'dancing',
     SLEEPING: 'sleeping',
@@ -25,9 +26,10 @@ export const AvatarState = {
 
 // State transition rules - which states can transition to which
 const TRANSITION_RULES = {
-    [AvatarState.IDLE]: [AvatarState.DRAGGING, AvatarState.SITTING, AvatarState.SITTING_TASKBAR, AvatarState.DANCING, AvatarState.SLEEPING, AvatarState.HAPPY, AvatarState.SAD, AvatarState.EXCITED, AvatarState.EMBARRASSED, AvatarState.THINKING, AvatarState.SPEAKING],
-    [AvatarState.DRAGGING]: [AvatarState.IDLE, AvatarState.SITTING, AvatarState.SITTING_TASKBAR],
+    [AvatarState.IDLE]: [AvatarState.DRAGGING, AvatarState.SITTING, AvatarState.SITTING_WINDOW, AvatarState.SITTING_TASKBAR, AvatarState.DANCING, AvatarState.SLEEPING, AvatarState.HAPPY, AvatarState.SAD, AvatarState.EXCITED, AvatarState.EMBARRASSED, AvatarState.THINKING, AvatarState.SPEAKING],
+    [AvatarState.DRAGGING]: [AvatarState.IDLE, AvatarState.SITTING, AvatarState.SITTING_WINDOW, AvatarState.SITTING_TASKBAR],
     [AvatarState.SITTING]: [AvatarState.IDLE, AvatarState.DRAGGING, AvatarState.SLEEPING, AvatarState.HAPPY],
+    [AvatarState.SITTING_WINDOW]: [AvatarState.IDLE, AvatarState.DRAGGING, AvatarState.SLEEPING],
     [AvatarState.SITTING_TASKBAR]: [AvatarState.IDLE, AvatarState.DRAGGING, AvatarState.SLEEPING],
     [AvatarState.DANCING]: [AvatarState.IDLE],
     [AvatarState.SLEEPING]: [AvatarState.IDLE, AvatarState.DRAGGING],
@@ -75,6 +77,15 @@ export const STATE_ANIMATIONS = {
         swayAmplitude: 0.002,
         expression: 'relaxed',
         expressionWeight: 0.5,
+        legDangle: true
+    },
+    [AvatarState.SITTING_WINDOW]: {
+        breathingSpeed: 1.2,
+        breathingAmplitude: 0.008,
+        swaySpeed: 0.4,
+        swayAmplitude: 0.003,
+        expression: 'relaxed',
+        expressionWeight: 0.4,
         legDangle: true
     },
     [AvatarState.DANCING]: {
@@ -343,6 +354,7 @@ export class AvatarStateController {
      */
     isSitting() {
         return this.currentState === AvatarState.SITTING ||
+            this.currentState === AvatarState.SITTING_WINDOW ||
             this.currentState === AvatarState.SITTING_TASKBAR;
     }
 

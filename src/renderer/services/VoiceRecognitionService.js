@@ -11,6 +11,12 @@ export class VoiceRecognitionService {
         this.interimResults = true;
         this.language = 'en-US';
         this.wakeWords = ['hey nizhal', 'hello nizhal', 'ok nizhal', 'nizhal'];
+        this.personalityWakeWords = {
+            gf: ['hey babe', 'hey love', 'sweetheart', 'baby'],
+            bf: ['yo king', 'hey bro', 'dude', 'hey man'],
+            jarvis: ['hey jarvis', 'jarvis', 'computer', 'assistant']
+        };
+        this.activePersonality = 'gf';
         this.wakeWordEnabled = false;
         this.wakeWordCallback = null;
         this.autoRestart = false;
@@ -65,8 +71,14 @@ export class VoiceRecognitionService {
             // Check for wake words in interim results
             if (this.wakeWordEnabled && !isFinal) {
                 const lowerTranscript = transcript.toLowerCase();
-                for (const wakeWord of this.wakeWords) {
-                    if (lowerTranscript.includes(wakeWord)) {
+                // Check base wake words + personality wake words
+                const allWakeWords = [
+                    ...this.wakeWords,
+                    ...(this.personalityWakeWords[this.activePersonality] || [])
+                ];
+                for (const wakeWord of allWakeWords) {
+                    if (lowerTranscript.includes(wakeWord.toLowerCase())) {
+                        console.log(`[VoiceRecognition] Wake word detected: ${wakeWord}`);
                         this.wakeWordCallback?.();
                         return;
                     }
@@ -284,6 +296,21 @@ export class VoiceRecognitionService {
 
     setWakeWords(words) {
         this.wakeWords = words.map(w => w.toLowerCase());
+    }
+
+    /**
+     * Set active personality - updates wake words accordingly
+     * @param {string} personality - 'gf', 'bf', or 'jarvis'
+     */
+    setPersonality(personality) {
+        this.activePersonality = personality;
+        const personalityWords = this.personalityWakeWords[personality] || [];
+        // Combine base wake words with personality-specific ones
+        this.wakeWords = [
+            'hey nizhal', 'hello nizhal', 'ok nizhal', 'nizhal',
+            ...personalityWords.map(w => w.toLowerCase())
+        ];
+        console.log(`[VoiceRecognition] Wake words updated for ${personality}:`, this.wakeWords);
     }
 
     setContinuous(continuous) {

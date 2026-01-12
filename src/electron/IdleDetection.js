@@ -15,15 +15,48 @@ class IdleDetection {
 
     /**
      * Start monitoring
-     * @param {Object} callbacks - { onIdle, onActive }
+     * @param {Object} callbacks - { onIdle, onActive, onSuspend, onResume, onLockScreen, onUnlockScreen }
      */
-    start({ onIdle, onActive }) {
+    start({ onIdle, onActive, onSuspend, onResume, onLockScreen, onUnlockScreen }) {
         if (this.isEnabled) return;
 
         this.isEnabled = true;
         this.onIdle = onIdle;
         this.onActive = onActive;
         this.isIdle = false;
+
+        // Listen to system power events (screen lock/unlock, suspend/resume)
+        powerMonitor.on('suspend', () => {
+            console.log('[IdleDetection] System suspended');
+            if (onSuspend) onSuspend();
+            if (this.onIdle) this.onIdle();
+        });
+
+        powerMonitor.on('resume', () => {
+            console.log('[IdleDetection] System resumed');
+            if (onResume) onResume();
+            // Delay to allow system to fully wake up
+            setTimeout(() => {
+                if (this.onActive) this.onActive();
+            }, 1000);
+        });
+
+        powerMonitor.on('lock-screen', () => {
+            console.log('[IdleDetection] Screen locked');
+            if (onLockScreen) onLockScreen();
+            this.isIdle = true;
+            if (this.onIdle) this.onIdle();
+        });
+
+        powerMonitor.on('unlock-screen', () => {
+            console.log('[IdleDetection] Screen unlocked');
+            if (onUnlockScreen) onUnlockScreen();
+            this.isIdle = false;
+            // Delay to ensure desktop is fully visible before showing window
+            setTimeout(() => {
+                if (this.onActive) this.onActive();
+            }, 500);
+        });
 
         // Use polling for finer control or powerMonitor events
         // powerMonitor.getSystemIdleTime() returns seconds

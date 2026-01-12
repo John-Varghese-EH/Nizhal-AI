@@ -1,12 +1,19 @@
-import { app, BrowserWindow, ipcMain, shell, nativeTheme } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, nativeTheme, globalShortcut } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
+
 import { MultiWindowManager } from './src/electron/MultiWindowManager.js';
 import { createSystemBridge } from './src/electron/bridge.js';
 import { PersonalityCore } from './src/core/PersonalityCore.js';
 import { PersonaManager } from './src/core/PersonaManager.js';
 import { MemoryService } from './src/core/MemoryService.js';
+import { appStateService } from './src/core/AppStateService.js';
 import { AIService } from './src/services/AIService.js';
+import { NizhalAI } from './src/core/NizhalAI.js';
 import { VoiceService } from './src/services/VoiceService.js';
 import { PaymentService } from './src/services/PaymentService.js';
 import { LicenseService } from './src/services/LicenseService.js';
@@ -24,12 +31,16 @@ let personalityCore = null;
 let personaManager = null;
 let memoryService = null;
 let aiService = null;
+let nizhalAI = null;
 let voiceService = null;
 let paymentService = null;
 let licenseService = null;
 let personaMarketplace = null;
 
 async function initializeServices() {
+  // Initialize centralized state service first
+  appStateService.initialize(ipcMain);
+
   personalityCore = new PersonalityCore();
   memoryService = new MemoryService(app.getPath('userData'));
   await memoryService.initialize();
@@ -39,9 +50,18 @@ async function initializeServices() {
   await licenseService.initialize();
 
   aiService = new AIService(personaManager, memoryService);
+  await aiService.initialize();
+  nizhalAI = new NizhalAI(aiService, personalityCore, appStateService);
+
   voiceService = new VoiceService();
   paymentService = new PaymentService();
   personaMarketplace = new PersonaMarketplace(licenseService, paymentService);
+
+  // Sync initial personality mode from state to personaManager
+  const savedPersonaId = appStateService.get('ai.activePersonaId');
+  if (savedPersonaId) {
+    personaManager.setActivePersona(savedPersonaId);
+  }
 }
 
 function setupSecurityPolicy() {
@@ -62,6 +82,26 @@ function setupSecurityPolicy() {
   });
 }
 
+// Register global productivity shortcuts
+function registerGlobalShortcuts() {
+  globalShortcut.register('CommandOrControl+Shift+Z', () => {
+    // Zen Mode
+    windowManager.broadcast('hotkey:zen');
+  });
+
+  globalShortcut.register('CommandOrControl+Shift+T', () => {
+    // Time Report
+    windowManager.broadcast('hotkey:time');
+  });
+
+  globalShortcut.register('CommandOrControl+Shift+H', () => {
+    // Health Check
+    windowManager.broadcast('hotkey:health');
+  });
+
+  console.log('[Main] Global shortcuts registered');
+}
+
 async function createWindows() {
   const preloadPath = path.join(__dirname, 'preload.js');
 
@@ -74,6 +114,14 @@ async function createWindows() {
   // Create chat window (hidden by default)
   await windowManager.createChatWindow(preloadPath);
 
+  // Register windows for state synchronization
+  if (windowManager.characterWindow) {
+    appStateService.registerWindow(windowManager.characterWindow);
+  }
+  if (windowManager.chatWindow) {
+    appStateService.registerWindow(windowManager.chatWindow);
+  }
+
   // Create system tray
   const iconPath = path.join(__dirname, 'assets', 'icon.png');
   windowManager.createTray(iconPath);
@@ -84,15 +132,53 @@ async function createWindows() {
   }
 
   systemBridge = createSystemBridge();
+
+  // Register shortcuts
+  registerGlobalShortcuts();
 }
 
 function setupIPC() {
   // Window controls for chat window
   ipcMain.handle('window:minimize', () => windowManager?.hideChatWindow());
-  ipcMain.handle('window:maximize', () => { }); // Not needed for frameless
+  ipcMain.handle('window:maximize', () => {
+    if (windowManager?.chatWindow && !windowManager.chatWindow.isDestroyed()) {
+      if (windowManager.chatWindow.isMaximized()) {
+        windowManager.chatWindow.unmaximize();
+        windowManager.restoreCharacterPosition();
+      } else {
+        windowManager.chatWindow.maximize();
+        windowManager.moveCharacterToTopLeft();
+      }
+      return windowManager.chatWindow.isMaximized();
+    }
+    return false;
+  });
   ipcMain.handle('window:close', () => windowManager?.hideChatWindow());
   ipcMain.handle('window:showChat', () => windowManager?.showChatWindow());
   ipcMain.handle('window:hideChat', () => windowManager?.hideChatWindow());
+
+  // Window state tracking for adaptive UI
+  ipcMain.handle('window:getState', () => {
+    if (windowManager?.chatWindow && !windowManager.chatWindow.isDestroyed()) {
+      return {
+        isMaximized: windowManager.chatWindow.isMaximized(),
+        isMinimized: windowManager.chatWindow.isMinimized(),
+        isVisible: windowManager.chatWindow.isVisible(),
+        bounds: windowManager.chatWindow.getBounds()
+      };
+    }
+    return null;
+  });
+
+  // Privacy mode toggle (stored in memory service)
+  ipcMain.handle('privacy:getMode', () => memoryService?.getUserPreferences()?.privacyMode || false);
+  ipcMain.handle('privacy:setMode', async (_, enabled) => {
+    const prefs = await memoryService?.getUserPreferences() || {};
+    prefs.privacyMode = enabled;
+    await memoryService?.setUserPreferences(prefs);
+    windowManager?.broadcast('privacy:changed', enabled);
+    return enabled;
+  });
 
   // Character window controls
   ipcMain.handle('character:show', () => windowManager?.showCharacterWindow());
@@ -105,8 +191,10 @@ function setupIPC() {
   ipcMain.handle('character:snap', (_, corner) => windowManager?.snapCharacterToCorner(corner));
   ipcMain.handle('character:setClickThrough', (_, enable) => windowManager?.setCharacterClickThrough(enable));
   ipcMain.handle('character:setModel', (_, modelId) => {
-    // Send model change to character window
-    windowManager?.sendToCharacter('character:modelChanged', modelId);
+    // Update state
+    appStateService.set('vrm.modelId', modelId);
+    // ALSO send direct message to ensure immediate response
+    windowManager?.sendToCharacter('vrm:modelChanged', modelId);
     return modelId;
   });
   ipcMain.handle('window:moveCharacter', (_, deltaX, deltaY) => {
@@ -114,6 +202,10 @@ function setupIPC() {
     if (pos) {
       windowManager?.setCharacterPosition(pos.x + deltaX, pos.y + deltaY);
     }
+  });
+  ipcMain.handle('character:setSize', (_, width, height) => {
+    windowManager?.setCharacterSize(width, height);
+    return { width, height };
   });
 
   // Window detection control
@@ -126,6 +218,22 @@ function setupIPC() {
     return enable;
   });
 
+  // Character position for gravity/physics
+  ipcMain.handle('window:getCharacterPosition', () => {
+    return windowManager?.getCharacterPosition() || { x: 0, y: 0 };
+  });
+
+  // Mouse tracking for cursor follow (returns dummy success - actual tracking is client-side)
+  ipcMain.handle('mouse:startTracking', () => {
+    // Mouse tracking is handled client-side via mousemove events
+    // This is just a no-op to prevent IPC errors
+    return true;
+  });
+
+  ipcMain.handle('mouse:stopTracking', () => {
+    return true;
+  });
+
   // Gravity physics controls
   let gravityEnabled = false;
   ipcMain.handle('character:toggleGravity', (_, enable) => {
@@ -136,6 +244,11 @@ function setupIPC() {
   });
   ipcMain.handle('character:jump', () => {
     windowManager?.sendToCharacter('character:jump');
+  });
+
+  ipcMain.handle('character:toggleGame', (_, enable) => {
+    windowManager?.sendToCharacter('game:toggle', enable);
+    return enable;
   });
 
   // System controls
@@ -172,7 +285,11 @@ function setupIPC() {
     // Update character state: thinking
     windowManager?.sendToCharacter('avatar:state', { isThinking: true, isSpeaking: false });
 
-    const response = await aiService?.chat(message);
+    // Use NizhalAI for emotional processing
+    const result = await nizhalAI?.process(message);
+    const response = result.text;
+
+    // Legacy integration (if needed for personalityCore metrics)
     personalityCore?.processInteraction(message, response);
 
     // Update character state: speaking
@@ -192,6 +309,7 @@ function setupIPC() {
   ipcMain.handle('ai:setProviderOrder', (_, order) => aiService?.setProviderOrder(order));
   ipcMain.handle('ai:setFallbackEnabled', (_, enabled) => aiService?.setFallbackEnabled(enabled));
   ipcMain.handle('ai:getModels', () => aiService?.getAvailableModels());
+  ipcMain.handle('ai:setModel', (_, providerId, modelId) => aiService?.setModel(providerId, modelId));
 
   // Voice
   ipcMain.handle('voice:speak', async (_, text, options) => {
@@ -264,6 +382,27 @@ if (!gotTheLock) {
       await createWindows();
       console.log('[Main] Windows created.');
 
+      // Register Alt key toggle for character window click-through
+      // Note: Electron can't capture raw Alt key, so we use Alt+Space as trigger
+      // and a polling mechanism for raw Alt detection
+      let isAltInteractionEnabled = false;
+
+      // Use Alt+Space to toggle interaction mode
+      globalShortcut.register('Alt+Space', () => {
+        isAltInteractionEnabled = !isAltInteractionEnabled;
+        windowManager?.setCharacterClickThrough(!isAltInteractionEnabled);
+        windowManager?.sendToCharacter('character:interactionToggle', isAltInteractionEnabled);
+        console.log(`[Main] Alt+Space - Click-through: ${!isAltInteractionEnabled}`);
+      });
+
+      // Alternative: Use Ctrl+Alt for toggle (easier to press)
+      globalShortcut.register('CommandOrControl+Alt+I', () => {
+        isAltInteractionEnabled = !isAltInteractionEnabled;
+        windowManager?.setCharacterClickThrough(!isAltInteractionEnabled);
+        windowManager?.sendToCharacter('character:interactionToggle', isAltInteractionEnabled);
+        console.log(`[Main] Ctrl+Alt+I - Click-through: ${!isAltInteractionEnabled}`);
+      });
+
       if (process.defaultApp) {
         if (process.argv.length >= 2) {
           app.setAsDefaultProtocolClient('nizhal', process.execPath, [path.resolve(process.argv[1])]);
@@ -282,6 +421,11 @@ if (!gotTheLock) {
     }
   });
 }
+
+// Unregister shortcuts on quit
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

@@ -1,11 +1,14 @@
 import React, { useRef, useEffect, useState, useCallback, Suspense } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree, extend } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { motion } from 'framer-motion';
 import * as THREE from 'three';
 import { VRMLoaderService } from '../../../services/VRMLoaderService';
 import { LipSyncService } from '../../../services/LipSyncService';
 import TouchRegionSystem from './TouchRegionSystem';
+
+// Extend THREE objects for R3F (required in v8+)
+extend(THREE);
 
 /**
  * VRM Character Component - Renders the loaded VRM inside Three.js scene

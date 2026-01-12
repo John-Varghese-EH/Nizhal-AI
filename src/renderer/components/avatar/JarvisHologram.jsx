@@ -1,7 +1,10 @@
 import React, { useRef, useMemo } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, extend } from '@react-three/fiber';
 import { motion } from 'framer-motion';
 import * as THREE from 'three';
+
+// Extend THREE objects for R3F (required in v8+)
+extend(THREE);
 
 /**
  * Holographic Core - The central pulsing orb

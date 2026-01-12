@@ -1,0 +1,48 @@
+/* Glassmorphism Utilities */
+
+.nizhal-glass {
+    background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    border-radius: var(--border-radius-base, 16px);
+    transition: all 0.3s ease;
+}
+
+.nizhal-glass:hover {
+    background: rgba(255, 255, 255, 0.05);
+    /* Lighten slightly */
+    border-color: var(--color-primary);
+    box-shadow: 0 8px 32px 0 var(--glow-color);
+}
+
+.nizhal-glass-panel {
+    display: flex;
+    flex-direction: column;
+    padding: 1.5rem;
+    color: var(--text-primary);
+}
+
+/* Tech Overlay for JARVIS */
+[data-theme='jarvis'] .nizhal-glass {
+    background-image: var(--tech-grid);
+    border: 1px solid var(--color-primary);
+    box-shadow: 0 0 15px var(--glow-color) inset;
+}
+
+/* Animations included in globals, using them here */
+
+/* Scrollbar refinement */
+.nizhal-scroll::-webkit-scrollbar {
+    width: 4px;
+}
+
+.nizhal-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.nizhal-scroll::-webkit-scrollbar-thumb {
+    background: var(--color-primary);
+    border-radius: 10px;
+}

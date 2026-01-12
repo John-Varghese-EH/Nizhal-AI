@@ -1,8 +1,11 @@
 import React, { useRef, useEffect, Suspense, useMemo } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree, extend } from '@react-three/fiber';
 import { useGLTF, OrbitControls, Environment, useAnimations } from '@react-three/drei';
 import { motion } from 'framer-motion';
 import * as THREE from 'three';
+
+// Extend THREE objects for R3F (required in v8+)
+extend(THREE);
 
 /**
  * 3D Model Component - Loads and renders a GLTF/GLB model

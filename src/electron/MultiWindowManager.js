@@ -24,13 +24,27 @@ export class MultiWindowManager {
 
     /**
      * Create the character overlay window (transparent, always-on-top)
+     * Sizes dynamically based on screen resolution
      */
     async createCharacterWindow(preloadPath) {
+        const display = screen.getPrimaryDisplay();
+        const { width: screenWidth, height: screenHeight } = display.workArea;
+
+        // Calculate optimal window size based on screen resolution
+        // Target: 15% of screen height, minimum 400px, maximum 700px
+        const targetHeight = Math.max(400, Math.min(700, Math.round(screenHeight * 0.35)));
+        const targetWidth = Math.round(targetHeight * 0.65); // Maintain aspect ratio
+
+        // Position at bottom right with some padding
+        const padding = 20;
+        const posX = screenWidth - targetWidth - padding;
+        const posY = screenHeight - targetHeight - padding;
+
         this.characterWindow = new BrowserWindow({
-            width: 400,   // Larger to fit VRM models
-            height: 600,  // Taller for full character display with legs
-            x: screen.getPrimaryDisplay().workArea.width - 420,
-            y: screen.getPrimaryDisplay().workArea.height - 620,
+            width: targetWidth,
+            height: targetHeight,
+            x: posX,
+            y: posY,
             frame: false,
             transparent: true,
             alwaysOnTop: true,
@@ -44,7 +58,8 @@ export class MultiWindowManager {
                 contextIsolation: true,
                 nodeIntegration: false,
                 sandbox: true
-            }
+            },
+            icon: path.join(process.cwd(), 'assets', 'icon.png')
         });
 
         // Character window specific settings
@@ -62,9 +77,10 @@ export class MultiWindowManager {
             this.characterWindow = null;
         });
 
-        // Enable dragging
+        // Enable dragging and notify of window size
         this.characterWindow.webContents.on('did-finish-load', () => {
             this.characterWindow.webContents.send('window:ready', 'character');
+            this.characterWindow.webContents.send('window:resize', { width: targetWidth, height: targetHeight });
         });
 
         return this.characterWindow;
@@ -89,7 +105,8 @@ export class MultiWindowManager {
                 contextIsolation: true,
                 nodeIntegration: false,
                 sandbox: true
-            }
+            },
+            icon: path.join(process.cwd(), 'assets', 'icon.png')
         });
 
         // Load chat view
@@ -299,6 +316,16 @@ export class MultiWindowManager {
     }
 
     /**
+     * Set character window size
+     */
+    setCharacterSize(width, height) {
+        if (this.characterWindow && !this.characterWindow.isDestroyed()) {
+            this.characterWindow.setSize(Math.round(width), Math.round(height));
+            this.characterWindow.webContents.send('window:resize', { width, height });
+        }
+    }
+
+    /**
      * Snap character to corner
      */
     snapCharacterToCorner(corner) {
@@ -363,6 +390,34 @@ export class MultiWindowManager {
     }
 
     /**
+     * Move character to top-left corner (used when maximizing main window)
+     */
+    moveCharacterToTopLeft() {
+        if (this.characterWindow && !this.characterWindow.isDestroyed()) {
+            const currentBounds = this.characterWindow.getBounds();
+            this.originalCharacterPosition = { x: currentBounds.x, y: currentBounds.y };
+
+            // Move to top-left with some padding
+            this.characterWindow.setPosition(20, 20, true);
+            this.characterWindow.setAlwaysOnTop(true, 'screen-saver'); // Ensure it stays on top of full screen
+        }
+    }
+
+    /**
+     * Restore character to previous position
+     */
+    restoreCharacterPosition() {
+        if (this.characterWindow && !this.characterWindow.isDestroyed() && this.originalCharacterPosition) {
+            this.characterWindow.setPosition(
+                this.originalCharacterPosition.x,
+                this.originalCharacterPosition.y,
+                true
+            );
+            this.characterWindow.setAlwaysOnTop(true, 'floating'); // Reset z-order
+        }
+    }
+
+    /**
      * Start system idle detection
      */
     startIdleDetection() {
@@ -374,8 +429,54 @@ export class MultiWindowManager {
             onActive: () => {
                 console.log('System Active - Waking up...');
                 this.sendToCharacter('system:resume');
+                // Ensure character window is visible and on top after waking
+                this._restoreCharacterWindow();
+            },
+            onSuspend: () => {
+                console.log('System Suspend - Character will wait...');
+            },
+            onResume: () => {
+                console.log('System Resume - Restoring character...');
+                // Restore window after resume with delay for desktop to fully load
+                setTimeout(() => this._restoreCharacterWindow(), 1500);
+            },
+            onLockScreen: () => {
+                console.log('Screen Locked');
+                // Remember visibility state before lock
+                this._wasVisibleBeforeLock = this.isCharacterVisible;
+            },
+            onUnlockScreen: () => {
+                console.log('Screen Unlocked - Restoring character...');
+                // Restore window after unlock with delay for desktop to be ready
+                setTimeout(() => {
+                    if (this._wasVisibleBeforeLock !== false) {
+                        this._restoreCharacterWindow();
+                    }
+                }, 1000);
             }
         });
+    }
+
+    /**
+     * Restore character window visibility and always-on-top state
+     */
+    _restoreCharacterWindow() {
+        if (this.characterWindow && !this.characterWindow.isDestroyed()) {
+            // Force show the window
+            this.characterWindow.show();
+            this.isCharacterVisible = true;
+
+            // Re-apply always on top (Windows sometimes loses this)
+            this.characterWindow.setAlwaysOnTop(true, 'floating', 1);
+
+            // Bring to front
+            this.characterWindow.moveTop();
+
+            console.log('[MultiWindowManager] Character window restored');
+
+            // Notify renderer to refresh
+            this.sendToCharacter('system:resume');
+        }
     }
 
     /**

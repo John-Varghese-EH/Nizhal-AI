@@ -13,19 +13,19 @@ const PersonaAvatarConfig = {
         type: 'vrm',
         displayName: 'Zome',
         description: 'Cute anime companion from Mate-Engine',
-        vrmModel: '/assets/models/zome.vrm'
+        vrmModel: '/assets/models/14_Zome.vrm'
     },
     lazuli: {
         type: 'vrm',
         displayName: 'Lazuli',
         description: 'Elegant VRM character',
-        vrmModel: '/assets/models/lazuli.vrm'
+        vrmModel: '/assets/models/12_Lazuli.vrm'
     },
     aldina: {
         type: 'vrm',
         displayName: 'Aldina',
         description: 'Charming VRM avatar',
-        vrmModel: '/assets/models/aldina.vrm'
+        vrmModel: '/assets/models/11_Aldina.vrm'
     },
     // Original personas
     jarvis: {
@@ -38,7 +38,7 @@ const PersonaAvatarConfig = {
         imageSrc: '/assets/avatars/kavya-idle.png',
         altImageSrc: '/assets/avatars/kavya-thinking.png',
         speakingImageSrc: '/assets/avatars/kavya-speaking.png',
-        vrmModel: '/assets/models/kavya.vrm'
+        vrmModel: '/assets/models/03_Devika.vrm'
     },
     arjun: {
         type: 'image',
@@ -46,12 +46,12 @@ const PersonaAvatarConfig = {
         imageSrc: '/assets/avatars/arjun-idle.png',
         altImageSrc: '/assets/avatars/arjun-thinking.png',
         speakingImageSrc: '/assets/avatars/arjun-speaking.png',
-        vrmModel: '/assets/models/arjun.vrm'
+        vrmModel: '/assets/models/04_Arjun.vrm'
     },
     miku: {
         type: 'vrm',
         displayName: 'Hatsune Miku',
-        vrmModel: '/assets/models/miku.vrm'
+        vrmModel: '/assets/models/08_Miku.vrm'
     },
     naruto: {
         type: 'image',

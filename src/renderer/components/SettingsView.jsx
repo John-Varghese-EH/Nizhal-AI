@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Attribution from './Attribution';
 
-const SettingsView = ({ onBack, onPersonaChange }) => {
+const SettingsView = ({ onBack, onPersonaChange, privacyMode, onPrivacyToggle }) => {
     const [preferences, setPreferences] = useState({});
     const [personas, setPersonas] = useState([]);
     const [activePersonaId, setActivePersonaId] = useState('jarvis');
@@ -11,6 +12,7 @@ const SettingsView = ({ onBack, onPersonaChange }) => {
     const [aiProviders, setAiProviders] = useState([]);
     const [providerStatus, setProviderStatus] = useState(null);
     const [activeTab, setActiveTab] = useState('general');
+    const [availableModels, setAvailableModels] = useState([]);
 
     useEffect(() => {
         loadSettings();
@@ -22,15 +24,32 @@ const SettingsView = ({ onBack, onPersonaChange }) => {
             const allPersonas = await window.nizhal?.persona.getAll();
             const active = await window.nizhal?.persona.getActive();
             const providers = await window.nizhal?.ai.getProviders();
+
             const status = await window.nizhal?.ai.getProviderStatus();
+            const models = await window.nizhal?.ai.getModels();
 
             setPreferences(prefs || {});
             setPersonas(allPersonas || []);
             setActivePersonaId(active?.id || 'jarvis');
             setAiProviders(providers || []);
             setProviderStatus(status || {});
+            setAvailableModels(models || []);
         } catch (error) {
             console.error('Failed to load settings:', error);
+        }
+    };
+
+    const handleModelChange = async (providerId, modelId) => {
+        setIsSaving(true);
+        try {
+            await window.nizhal?.ai.setModel(providerId, modelId);
+            await handlePreferenceChange(`aiModel_${providerId}`, modelId);
+            const models = await window.nizhal?.ai.getModels();
+            setAvailableModels(models);
+        } catch (error) {
+            console.error('Failed to set model:', error);
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -277,6 +296,16 @@ const SettingsView = ({ onBack, onPersonaChange }) => {
                                             onChange={(value) => handlePreferenceChange('startWithWindows', value)}
                                         />
                                     </SettingRow>
+
+                                    <SettingRow
+                                        label="Privacy Mode"
+                                        description="Local-only AI (blocks cloud connections)"
+                                    >
+                                        <Toggle
+                                            enabled={privacyMode}
+                                            onChange={onPrivacyToggle}
+                                        />
+                                    </SettingRow>
                                 </div>
 
                                 {/* Support Links */}
@@ -315,19 +344,31 @@ const SettingsView = ({ onBack, onPersonaChange }) => {
                                 {/* Character Model Selection */}
                                 <div className="space-y-3">
                                     <h3 className="text-sm font-medium text-white/70">Character Model</h3>
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
                                         {[
                                             { id: 'jarvis', name: 'Jarvis', icon: '🔮', desc: 'Hologram' },
+                                            { id: 'aldina', name: 'Aldina', icon: '🌸', desc: 'VRM' },
                                             { id: 'zome', name: 'Zome', icon: '👧', desc: 'VRM' },
                                             { id: 'lazuli', name: 'Lazuli', icon: '💫', desc: 'VRM' },
-                                            { id: 'aldina', name: 'Aldina', icon: '🌸', desc: 'VRM' }
+                                            { id: 'miku', name: 'Hatsune Miku', icon: '🎤', desc: 'VRM' },
+                                            { id: 'nahida', name: 'Nahida', icon: '🌿', desc: 'VRM' },
+                                            { id: 'alicia', name: 'Alicia', icon: '🦊', desc: 'VRM' },
+                                            { id: 'pranama', name: 'Pranama', icon: '🙏', desc: 'VRM' },
+                                            { id: 'riku', name: 'Riku', icon: '👓', desc: 'VRM' },
+                                            { id: 'sheeba', name: 'Sheeba', icon: '👩', desc: 'VRM' },
+                                            { id: 'meera', name: 'Meera', icon: '👩‍🦰', desc: 'VRM' },
+                                            { id: 'devika', name: 'Devika', icon: '👸', desc: 'VRM' },
+                                            { id: 'linda', name: 'Linda', icon: '👱‍♀️', desc: 'VRM' },
+                                            { id: 'lakshmi', name: 'Lakshmi', icon: '🕉️', desc: 'VRM' },
+                                            { id: 'ananya', name: 'Ananya', icon: '💃', desc: 'VRM' }
                                         ].map((char) => (
                                             <motion.button
                                                 key={char.id}
                                                 whileTap={{ scale: 0.95 }}
-                                                onClick={() => {
+                                                onClick={async () => {
+                                                    // use await to ensure it completes
+                                                    await window.nizhal?.character?.setModel?.(char.id);
                                                     handlePreferenceChange('characterModel', char.id);
-                                                    window.nizhal?.character?.setModel?.(char.id);
                                                 }}
                                                 className={`p-3 rounded-xl text-left transition-all ${preferences.characterModel === char.id
                                                     ? 'bg-indigo-600/30 border-2 border-indigo-500'
@@ -348,39 +389,40 @@ const SettingsView = ({ onBack, onPersonaChange }) => {
 
                                 {/* Display Settings */}
                                 <div className="space-y-3 border-t border-white/5 pt-4">
-                                    <h3 className="text-sm font-medium text-white/70">Display</h3>
+                                    <h3 className="text-sm font-medium text-white/70">Display & Interaction (Unified)</h3>
 
                                     <div>
                                         <div className="flex justify-between text-sm mb-1">
-                                            <span className="text-white/60">Size</span>
-                                            <span className="text-white/40">{(preferences.characterScale || 1).toFixed(1)}x</span>
+                                            <span className="text-white/60">Transparency</span>
+                                            <span className="text-white/40">{Math.round((preferences.characterOpacity || 0.8) * 100)}%</span>
                                         </div>
                                         <input
                                             type="range"
-                                            min="0.5"
-                                            max="2"
-                                            step="0.1"
-                                            value={preferences.characterScale || 1}
-                                            onChange={(e) => handlePreferenceChange('characterScale', parseFloat(e.target.value))}
-                                            className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <div className="flex justify-between text-sm mb-1">
-                                            <span className="text-white/60">Opacity</span>
-                                            <span className="text-white/40">{Math.round((preferences.characterOpacity || 1) * 100)}%</span>
-                                        </div>
-                                        <input
-                                            type="range"
-                                            min="0.3"
+                                            min="0.1"
                                             max="1"
-                                            step="0.1"
-                                            value={preferences.characterOpacity || 1}
-                                            onChange={(e) => handlePreferenceChange('characterOpacity', parseFloat(e.target.value))}
+                                            step="0.05"
+                                            value={preferences.characterOpacity || 0.8}
+                                            onChange={async (e) => {
+                                                const val = parseFloat(e.target.value);
+                                                handlePreferenceChange('characterOpacity', val);
+                                                // Sync with unified state for immediate effect
+                                                await window.nizhal?.state?.set?.('ui.transparency', val);
+                                            }}
                                             className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                                         />
                                     </div>
+
+                                    <SettingRow label="Click Through" description="Allow clicking windows behind character">
+                                        <Toggle
+                                            enabled={preferences.clickThrough ?? true}
+                                            onChange={async (value) => {
+                                                handlePreferenceChange('clickThrough', value);
+                                                // Sync with unified state
+                                                await window.nizhal?.state?.set?.('ui.clickThrough', value);
+                                                await window.nizhal?.character?.setClickThrough?.(value);
+                                            }}
+                                        />
+                                    </SettingRow>
 
                                     <div className="flex gap-2">
                                         {['low', 'medium', 'high'].map((q) => (
@@ -559,6 +601,27 @@ const SettingsView = ({ onBack, onPersonaChange }) => {
                                                     </div>
                                                 </div>
 
+                                                {/* Model Selection Dropdown */}
+                                                {provider.configured && availableModels.some(m => m.provider === provider.id) && (
+                                                    <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
+                                                        <span className="text-xs text-white/50">Model</span>
+                                                        <select
+                                                            value={preferences[`${provider.id}Model`] || provider.models?.[0] || ''}
+                                                            onChange={(e) => handleModelChange(provider.id, e.target.value)}
+                                                            className="bg-white/5 text-xs text-white rounded px-2 py-1 border border-white/10 outline-none focus:border-indigo-500/50"
+                                                        >
+                                                            {availableModels
+                                                                .filter(m => m.provider === provider.id)
+                                                                .map(model => (
+                                                                    <option key={model.id} value={model.id} className="bg-[#1a1a1a]">
+                                                                        {model.name}
+                                                                    </option>
+                                                                ))
+                                                            }
+                                                        </select>
+                                                    </div>
+                                                )}
+
                                                 {provider.configured && providerStatus?.currentProvider !== provider.id && (
                                                     <motion.button
                                                         whileTap={{ scale: 0.95 }}
@@ -703,8 +766,9 @@ const SettingsView = ({ onBack, onPersonaChange }) => {
                                     <h3 className="text-sm font-medium text-white/70">Character Interaction</h3>
                                     <div className="space-y-2">
                                         {[
-                                            { keys: 'Alt + Click', action: 'Enable interaction mode' },
-                                            { keys: 'Alt + Drag', action: 'Move character' },
+                                            { keys: 'Alt + Space', action: 'Toggle interaction mode' },
+                                            { keys: 'Ctrl + Alt + I', action: 'Toggle interaction mode (alt)' },
+                                            { keys: 'Drag (when active)', action: 'Move character' },
                                             { keys: 'Right Click', action: 'Open context menu' },
                                             { keys: 'Click Head', action: 'Pat (shows happy reaction)' },
                                             { keys: 'Click Body', action: 'Poke (shows surprised reaction)' },
@@ -769,11 +833,10 @@ const SettingsView = ({ onBack, onPersonaChange }) => {
                         )}
                     </AnimatePresence>
 
-                    <div className="text-center pt-4 pb-2 space-y-2">
-                        <div className="text-xs text-white/30">
-                            Nizhal AI v1.0.0 • Made with 💜 in India
-                        </div>
-                        <div className="flex justify-center gap-4 text-xs text-white/20">
+                    {/* Attribution Footer */}
+                    <div className="pt-4 pb-2">
+                        <Attribution variant="full" />
+                        <div className="flex justify-center gap-4 text-xs text-white/20 mt-3">
                             <button onClick={() => openExternal('https://nizhal.ai/privacy')} className="hover:text-white/40">Privacy</button>
                             <button onClick={() => openExternal('https://nizhal.ai/terms')} className="hover:text-white/40">Terms</button>
                             <button onClick={() => openExternal('https://nizhal.ai/changelog')} className="hover:text-white/40">Changelog</button>

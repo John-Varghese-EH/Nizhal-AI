@@ -1,9 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree, extend } from '@react-three/fiber';
 import { OrbitControls, useGLTF, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { getAvatarStateController, AvatarState } from '../../../services/AvatarStateController';
+import { getVRMAAnimationService } from '../../../services/VRMAAnimationService';
+import { getMouseInteractionService } from '../../../services/MouseInteractionService';
 import { touchRegionsService } from '../../../services/TouchRegions';
+import { getAdvancedAnimationEngine, InteractionType } from '../../../services/AdvancedAnimationEngine';
+
+// Extend THREE objects for R3F (required in v8+)
+extend(THREE);
 
 // Lazy import VRM loader to reduce initial bundle
 let VRMLoaderPlugin = null;
@@ -45,6 +51,12 @@ const OptimizedVRMModel = ({
     const frameCountRef = useRef(0);
     const lookAtTargetRef = useRef(null);
     const stateControllerRef = useRef(getAvatarStateController());
+    const vrmaServiceRef = useRef(getVRMAAnimationService());
+    const mouseServiceRef = useRef(getMouseInteractionService());
+    const animEngineRef = useRef(getAdvancedAnimationEngine());
+    const lastStateRef = useRef(null);
+    const idleGestureTimerRef = useRef(0);
+    const lastClickTimeRef = useRef(0);
 
     // Load VRM with lazy deps
     useEffect(() => {
@@ -78,12 +90,23 @@ const OptimizedVRMModel = ({
                             // Rotate model to face camera
                             loadedVrm.scene.rotation.y = Math.PI;
 
-                            // Setup lookAt target as Object3D (proper way per three-vrm docs)
-                            if (loadedVrm.lookAt) {
-                                const lookAtTarget = new THREE.Object3D();
-                                lookAtTarget.position.set(0, 1.5, 1);
-                                loadedVrm.lookAt.target = lookAtTarget;
-                                lookAtTargetRef.current = lookAtTarget;
+                            // Initialize VRMA animation service with VRM
+                            if (vrmaServiceRef.current) {
+                                const vrmaService = vrmaServiceRef.current;
+                                vrmaService.initialize(loadedVrm);
+                                console.log('[OptimizedVRMModel] VRMA animation service initialized');
+
+                                // Set initial idle state - will auto-load and play idle animation
+                                vrmaService.setState('idle').then((success) => {
+                                    if (success) {
+                                        console.log('[OptimizedVRMModel] ✓ Idle animation started successfully');
+                                        console.log('[OptimizedVRMModel] Animation state:', vrmaService.getState());
+                                    } else {
+                                        console.warn('[OptimizedVRMModel] ✗ Failed to start idle animation');
+                                    }
+                                }).catch(err => {
+                                    console.error('[OptimizedVRMModel] ✗ Error starting idle animation:', err);
+                                });
                             }
 
                             console.log('VRM loaded:', loadedVrm.meta?.name || url);
@@ -113,8 +136,39 @@ const OptimizedVRMModel = ({
         };
 
         loadModel();
-        return () => { mounted = false; };
+
+        // Cleanup when URL changes (model switch)
+        return () => {
+            mounted = false;
+            // Dispose animation service to allow reinitialization with new VRM
+            if (vrmaServiceRef.current) {
+                vrmaServiceRef.current.dispose();
+                console.log('[OptimizedVRMModel] Animation service disposed for model change');
+            }
+        };
     }, [url]);
+
+    // Initialize MouseInteractionService when VRM is loaded
+    useEffect(() => {
+        if (vrm && mouseServiceRef.current) {
+            mouseServiceRef.current.initialize();
+            console.log('[OptimizedVRMModel] MouseInteractionService initialized');
+
+            // Subscribe to interaction events
+            const unsubscribe = mouseServiceRef.current.onInteraction((event) => {
+                console.log('[OptimizedVRMModel] Interaction:', event.type);
+                // Trigger appropriate reactions
+                if (event.type === 'headPat') {
+                    touchRegionsService.triggerReaction('head');
+                }
+            });
+
+            return () => {
+                unsubscribe();
+                mouseServiceRef.current?.stop();
+            };
+        }
+    }, [vrm]);
 
     // Optimized update loop - uses state controller for animations
     useFrame((state, delta) => {
@@ -122,26 +176,64 @@ const OptimizedVRMModel = ({
 
         frameCountRef.current++;
 
-        // Skip frames for performance (update every 2nd frame)
-        if (frameCountRef.current % 2 !== 0) return;
+        // Full quality - update every frame
+        const dt = delta;
 
-        const dt = delta * 2; // Compensate for skipped frames
+        // Required for VRM visibility and spring bones
         vrm.update(dt);
 
         // Update state controller
         const stateController = stateControllerRef.current;
         stateController.update(dt);
 
-        // Get animation parameters from current state
-        const animParams = stateController.getAnimationParams();
+        // Get current avatar state
         const currentState = stateController.getState();
 
-        // Look at mouse (throttled) - use proper Object3D target
-        // Disable look-at during sleeping
-        if (enableLookAt && vrm.lookAt && lookAtTargetRef.current && currentState !== AvatarState.SLEEPING) {
-            const x = mouse.x * 2;
-            const y = mouse.y * 1 + 1.5;
-            lookAtTargetRef.current.position.set(x, y, 1);
+        // Update VRMA animation mixer
+        const vrmaService = vrmaServiceRef.current;
+        if (vrmaService) {
+            vrmaService.update(dt);
+
+            // Detect state changes and trigger appropriate VRMA animation
+            if (currentState !== lastStateRef.current) {
+                lastStateRef.current = currentState;
+
+                // Map AvatarState to animation state string
+                const stateMap = {
+                    [AvatarState.IDLE]: 'idle',
+                    [AvatarState.SPEAKING]: 'speaking',
+                    [AvatarState.DANCING]: 'dancing',
+                    [AvatarState.SLEEPING]: 'sleeping',
+                    [AvatarState.DRAGGING]: 'dragging',
+                    [AvatarState.SITTING_TASKBAR]: 'sitting',
+                    [AvatarState.SITTING_WINDOW]: 'sitting',
+                    [AvatarState.THINKING]: 'thinking',
+                    [AvatarState.HAPPY]: 'happy',
+                    [AvatarState.EXCITED]: 'happy',
+                    [AvatarState.SAD]: 'idle',
+                    [AvatarState.EMBARRASSED]: 'idle',
+                };
+
+                const animState = stateMap[currentState] || 'idle';
+                console.log(`[OptimizedVRMModel] State changed: ${currentState} -> animation: ${animState}`);
+                vrmaService.setState(animState).catch(err => {
+                    console.warn('[OptimizedVRMModel] Failed to set animation state:', err);
+                });
+            }
+
+            // Random idle gestures every 30-60 seconds
+            if (currentState === AvatarState.IDLE) {
+                idleGestureTimerRef.current += dt;
+                if (idleGestureTimerRef.current > 30 + Math.random() * 30) {
+                    idleGestureTimerRef.current = 0;
+                    // 40% chance to play a gesture
+                    if (Math.random() < 0.4) {
+                        vrmaService.playRandomGesture();
+                    }
+                }
+            } else {
+                idleGestureTimerRef.current = 0;
+            }
         }
 
         // Blink animation (disabled during sleeping - eyes closed)
@@ -175,59 +267,33 @@ const OptimizedVRMModel = ({
             }
         }
 
-        // Apply state-based expression
-        if (vrm.expressionManager && animParams.expression) {
-            try {
-                const expr = vrm.expressionManager.getExpression(animParams.expression);
-                if (expr) {
-                    vrm.expressionManager.setValue(animParams.expression, animParams.expressionWeight || 0.5);
-                }
-            } catch (e) {
-                // Expression might not exist in this model
-            }
-        }
-
         // Keep eyes closed during sleeping
         if (currentState === AvatarState.SLEEPING && vrm.expressionManager) {
             vrm.expressionManager.setValue('blink', 1);
         }
-
-        // State-based animations
-        const elapsedTime = state.clock.elapsedTime;
-        let posY = 0;
-        let rotZ = 0;
-
-        // Breathing animation (varies by state)
-        if (animParams.breathingSpeed > 0) {
-            posY += Math.sin(elapsedTime * animParams.breathingSpeed) * animParams.breathingAmplitude;
-        }
-
-        // Sway animation
-        if (animParams.swaySpeed > 0) {
-            rotZ += Math.sin(elapsedTime * animParams.swaySpeed) * animParams.swayAmplitude;
-        }
-
-        // Dancing bounce
-        if (currentState === AvatarState.DANCING && animParams.bounceSpeed) {
-            posY += Math.abs(Math.sin(elapsedTime * animParams.bounceSpeed)) * animParams.bounceAmplitude;
-        }
-
-        // Dragging float effect
-        if (currentState === AvatarState.DRAGGING && animParams.floatSpeed) {
-            posY += Math.sin(elapsedTime * animParams.floatSpeed) * animParams.floatAmplitude;
-        }
-
-        // Sleeping head tilt
-        if (currentState === AvatarState.SLEEPING && animParams.headTilt) {
-            rotZ = animParams.headTilt;
-        }
-
-        // Apply to VRM scene
-        if (vrm.scene) {
-            vrm.scene.position.y = posY;
-            vrm.scene.rotation.z = rotZ;
-        }
     });
+
+    // Handle interactive animation triggers (must be before any returns - React hooks rule)
+    const handleClick = useCallback((e) => {
+        if (!vrm) return;
+        const now = Date.now();
+        const timeSinceLastClick = now - lastClickTimeRef.current;
+        lastClickTimeRef.current = now;
+
+        // Double-click detection (< 300ms)
+        if (timeSinceLastClick < 300) {
+            animEngineRef.current?.handleInteraction(InteractionType.DOUBLE_CLICK);
+        } else {
+            animEngineRef.current?.handleInteraction(InteractionType.CLICK);
+        }
+
+        touchRegionsService.handleTouch(e, vrm);
+    }, [vrm]);
+
+    const handlePointerOver = useCallback(() => {
+        animEngineRef.current?.handleInteraction(InteractionType.HOVER);
+    }, []);
+
 
     if (loading) {
         return (
@@ -244,7 +310,8 @@ const OptimizedVRMModel = ({
             object={vrm.scene}
             scale={scale}
             position={position}
-            onClick={(e) => touchRegionsService.handleTouch(e, vrm)}
+            onClick={handleClick}
+            onPointerOver={handlePointerOver}
         />
     );
 };
@@ -267,12 +334,13 @@ const OptimizedVRMAvatar = ({
 
     // Quality presets
     const qualitySettings = useMemo(() => ({
-        low: { pixelRatio: 0.5, antialias: false, shadows: false },
-        medium: { pixelRatio: 0.75, antialias: true, shadows: false },
-        high: { pixelRatio: 1, antialias: true, shadows: true }
+        low: { pixelRatio: 0.75, antialias: true, shadows: false },
+        medium: { pixelRatio: 1, antialias: true, shadows: false },
+        high: { pixelRatio: 1.5, antialias: true, shadows: true }
     }), []);
 
-    const settings = qualitySettings[quality] || qualitySettings.medium;
+    // Default to high quality
+    const settings = qualitySettings[quality] || qualitySettings.high;
 
     const handleLoad = useCallback((vrm) => {
         setIsLoaded(true);
@@ -292,14 +360,16 @@ const OptimizedVRMAvatar = ({
                 gl={{
                     antialias: settings.antialias,
                     alpha: true,
-                    powerPreference: 'default',
+                    powerPreference: 'high-performance',
                     preserveDrawingBuffer: true
                 }}
                 style={{ background: 'transparent' }}
-                frameloop="always" // Only render when needed
+                frameloop="always"
             >
-                <ambientLight intensity={0.6} />
-                <directionalLight position={[5, 5, 5]} intensity={0.5} />
+                {/* Improved lighting for better VRM rendering */}
+                <ambientLight intensity={0.8} />
+                <directionalLight position={[5, 5, 5]} intensity={0.7} />
+                <directionalLight position={[-5, 3, -5]} intensity={0.3} />
 
                 <OptimizedVRMModel
                     key={modelUrl}
@@ -315,8 +385,7 @@ const OptimizedVRMAvatar = ({
                     <OrbitControls
                         enableZoom={false}
                         enablePan={false}
-                        minPolarAngle={Math.PI / 3}
-                        maxPolarAngle={Math.PI / 2}
+                        enableRotate={false}
                         target={[0, 1, 0]}
                     />
                 )}
@@ -332,4 +401,6 @@ const OptimizedVRMAvatar = ({
     );
 };
 
+// Export both: default is full component with Canvas, named is just the model
+export { OptimizedVRMModel };
 export default OptimizedVRMAvatar;

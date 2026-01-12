@@ -29,7 +29,7 @@ export class AIService {
                 enabled: true
             },
             gemini: {
-                model: 'gemini-2.0-flash',
+                model: 'gemini-1.5-flash-latest', // Use latest stable flash alias
                 apiKey: '',
                 enabled: true
             },
@@ -47,7 +47,20 @@ export class AIService {
         };
 
         // Initialize providers
-        this.initializeProviders();
+        // this.initializeProviders(); // Moved to explicit initialize() call
+    }
+
+    async initialize() {
+        console.log('[AIService] Starting initialization...');
+        await this.initializeProviders();
+        console.log('[AIService] Initialization complete.');
+        console.log('[AIService] Current Provider:', this.provider);
+        console.log('[AIService] Configured Providers:', {
+            ollama: this.providerConfigs.ollama.enabled,
+            gemini: !!this.providerConfigs.gemini.apiKey,
+            openai: !!this.providerConfigs.openai.apiKey,
+            anthropic: !!this.providerConfigs.anthropic.apiKey
+        });
     }
 
     async initializeProviders() {
@@ -59,9 +72,9 @@ export class AIService {
                 this.ollamaClient = new Ollama({
                     host: this.providerConfigs.ollama.baseUrl
                 });
-                console.log('✓ Ollama (local AI) is available');
+                console.log('[AIService] ✓ Ollama (local AI) is available');
             } else {
-                console.log('✗ Ollama not available, will use API providers');
+                console.log('[AIService] ✗ Ollama not available, checking API providers...');
             }
 
             // Load saved config (API keys, preferences)
@@ -115,14 +128,14 @@ export class AIService {
                     continue;
                 }
                 this.provider = providerId;
-                console.log(`Auto-selected provider: ${providerId}`);
+                console.log(`[AIService] Auto-selected provider: ${providerId}`);
                 return;
             }
         }
 
         // No provider available
         this.provider = 'none';
-        console.warn('No AI provider available. Please configure an API key or start Ollama.');
+        console.warn('[AIService] No AI provider available. Please configure an API key or start Ollama.');
     }
 
     isProviderConfigured(providerId) {
@@ -133,7 +146,7 @@ export class AIService {
             case 'ollama':
                 return true; // Ollama doesn't need API key
             case 'gemini':
-                return !!config.apiKey && !!this.geminiClient;
+                return !!config.apiKey; // Check key only, init JIT if needed
             case 'openai':
                 return !!config.apiKey;
             case 'anthropic':
@@ -179,6 +192,9 @@ export class AIService {
             if (prefs?.ollamaBaseUrl) {
                 this.providerConfigs.ollama.baseUrl = prefs.ollamaBaseUrl;
             }
+            if (prefs?.geminiModel) {
+                this.providerConfigs.gemini.model = prefs.geminiModel;
+            }
             if (prefs?.openaiModel) {
                 this.providerConfigs.openai.model = prefs.openaiModel;
             }
@@ -216,13 +232,17 @@ export class AIService {
     }
 
     setProvider(provider, config = {}) {
+        if (typeof provider !== 'string') {
+            console.error('Invalid provider format:', provider);
+            return false;
+        }
+
         if (provider === 'ollama') {
             this.provider = 'ollama';
             if (config.model) this.providerConfigs.ollama.model = config.model;
             if (config.baseUrl) {
                 this.providerConfigs.ollama.baseUrl = config.baseUrl;
                 this.initializeOllama();
-                // Re-check availability with new URL
                 this.lastOllamaCheck = 0;
                 this.checkOllamaAvailability();
             }
@@ -253,6 +273,23 @@ export class AIService {
         }
 
         return { provider: this.provider, config: this.providerConfigs[this.provider] };
+    }
+
+    setModel(providerId, modelId) {
+        if (!this.providerConfigs[providerId]) {
+            throw new Error(`Unknown provider: ${providerId}`);
+        }
+
+        // Handle Ollama specialized logic if needed, but for now specific config is fine
+        this.providerConfigs[providerId].model = modelId;
+        console.log(`Model for ${providerId} set to ${modelId}`);
+
+        // If the provider we're changing is the active one, log it
+        if (this.provider === providerId) {
+            console.log(`Active provider ${providerId} model updated to ${modelId}`);
+        }
+
+        return true;
     }
 
     setProviderOrder(order) {
@@ -322,7 +359,7 @@ export class AIService {
         return {
             currentProvider: this.provider,
             ollamaAvailable: this.ollamaAvailable,
-            geminiConfigured: !!this.geminiClient,
+            geminiConfigured: !!this.geminiClient && !!this.providerConfigs.gemini.apiKey,
             openaiConfigured: !!this.providerConfigs.openai.apiKey,
             anthropicConfigured: !!this.providerConfigs.anthropic.apiKey,
             fallbackEnabled: this.enableFallback,
@@ -362,7 +399,7 @@ export class AIService {
 
         for (const providerId of providersToTry) {
             try {
-                console.log(`Trying provider: ${providerId}`);
+                console.log(`[AIService] Attempting chat with provider: ${providerId}`);
                 const response = await this.chatWithProvider(
                     providerId,
                     systemPrompt + memoryContext,
@@ -410,7 +447,12 @@ export class AIService {
             success: false,
             error: this.getHelpfulErrorMessage(lastError),
             details: lastError?.message,
-            triedProviders: providersToTry
+            details: lastError?.message,
+            triedProviders: providersToTry,
+            configStatus: {
+                geminiKey: !!this.providerConfigs.gemini.apiKey ? 'Set' : 'Missing',
+                geminiClient: !!this.geminiClient ? 'Ready' : 'Not Init'
+            }
         };
     }
 
@@ -435,8 +477,8 @@ export class AIService {
         if (errorMsg.includes('fetch') || errorMsg.includes('network') || errorMsg.includes('econnrefused')) {
             return 'Connection failed. Please check your internet connection or if Ollama is running.';
         }
-        if (errorMsg.includes('api key') || errorMsg.includes('unauthorized') || errorMsg.includes('401')) {
-            return 'Invalid API key. Please check your API key in Settings.';
+        if (errorMsg.includes('api key') || errorMsg.includes('unauthorized') || errorMsg.includes('401') || errorMsg.includes('permission denied')) {
+            return 'Invalid API key or unauthorized access. Please check your API key in Settings.';
         }
         if (errorMsg.includes('rate limit') || errorMsg.includes('429')) {
             return 'Rate limit reached. Please wait a moment or switch to a different provider.';
@@ -670,9 +712,9 @@ export class AIService {
         // Add static model lists for API providers
         if (this.providerConfigs.gemini.apiKey) {
             models.push(
-                { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', provider: 'gemini' },
-                { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', provider: 'gemini' },
-                { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash (Experimental)', provider: 'gemini' }
+                { id: 'gemini-1.5-flash-latest', name: 'Gemini 1.5 Flash', provider: 'gemini' },
+                { id: 'gemini-1.5-pro-latest', name: 'Gemini 1.5 Pro', provider: 'gemini' },
+                { id: 'gemini-pro', name: 'Gemini Pro (Legacy)', provider: 'gemini' }
             );
         }
 

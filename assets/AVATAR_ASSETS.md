@@ -1,6 +1,6 @@
 # Avatar Assets Guide
 
-This folder contains avatar assets for the Desktop Mate companion system.
+This folder contains avatar assets for the Desktop companion system.
 
 ## Folder Structure
 
