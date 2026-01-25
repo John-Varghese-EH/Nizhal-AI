@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Attribution from './Attribution';
+import LegalDocumentViewer from './LegalDocumentViewer';
 
 const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacyToggle, isModal = false, userProfile, onProfileChange }) => {
     const [preferences, setPreferences] = useState({});
@@ -13,6 +14,7 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
     const [providerStatus, setProviderStatus] = useState(null);
     const [activeTab, setActiveTab] = useState('general');
     const [availableModels, setAvailableModels] = useState([]);
+    const [showLegalModal, setShowLegalModal] = useState(null);
 
 
 
@@ -222,6 +224,7 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
                 <TabButton id="ai" label="AI Providers" active={activeTab === 'ai'} />
                 <TabButton id="voice" label="Voice" active={activeTab === 'voice'} />
                 <TabButton id="shortcuts" label="Shortcuts" active={activeTab === 'shortcuts'} />
+                <TabButton id="about" label="About" active={activeTab === 'about'} />
             </div>
 
             <div className="flex-1 overflow-y-auto">
@@ -935,9 +938,9 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
                     <div className="pt-4 pb-2">
                         <Attribution variant="full" />
                         <div className="flex justify-center gap-4 text-xs text-white/20 mt-3">
-                            <button onClick={() => openExternal('https://nizhal.ai/privacy')} className="hover:text-white/40">Privacy</button>
-                            <button onClick={() => openExternal('https://nizhal.ai/terms')} className="hover:text-white/40">Terms</button>
-                            <button onClick={() => openExternal('https://nizhal.ai/changelog')} className="hover:text-white/40">Changelog</button>
+                            <button onClick={() => setShowLegalModal('privacy')} className="hover:text-white/40">Privacy</button>
+                            <button onClick={() => setShowLegalModal('terms')} className="hover:text-white/40">Terms</button>
+                            <button onClick={() => openExternal('https://github.com/John-Varghese-EH/Nizhal-AI/releases')} className="hover:text-white/40">Changelog</button>
                         </div>
                     </div>
                 </div>
@@ -1002,6 +1005,13 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
                     </motion.div>
                 )
             }
+
+            {/* Legal Document Viewer Modal */}
+            <LegalDocumentViewer
+                isOpen={showLegalModal !== null}
+                onClose={() => setShowLegalModal(null)}
+                initialDocument={showLegalModal || 'terms'}
+            />
         </div >
     );
 };
