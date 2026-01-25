@@ -8,7 +8,7 @@
 
   **"More than just an assistant. A friend who lives on your screen."**
 
-  [![License](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
+  [![License](https://img.shields.io/badge/license-yellow.svg)](LICENSE)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Mac%20%7C%20Linux-blue.svg)](https://electronjs.org)
   [![Status](https://img.shields.io/badge/status-Active%20Alpha-brightgreen.svg)]()
 
