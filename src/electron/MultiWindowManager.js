@@ -423,14 +423,29 @@ export class MultiWindowManager {
     startIdleDetection() {
         IdleDetection.start({
             onIdle: () => {
-                console.log('System Idle - Sleeping...');
-                this.sendToCharacter('system:idle');
+                console.log('System Idle - Expanding to fullscreen screensaver...');
+
+                if (this.characterWindow && !this.characterWindow.isDestroyed()) {
+                    // Save current bounds to restore later
+                    if (!this.previousBounds) {
+                        this.previousBounds = this.characterWindow.getBounds();
+                    }
+
+                    // Get primary display size
+                    const display = screen.getPrimaryDisplay();
+                    const { width, height } = display.workArea;
+
+                    // Set to full screen (transparent overlay)
+                    this.characterWindow.setBounds({ x: 0, y: 0, width, height }, true);
+                    this.characterWindow.setAlwaysOnTop(true, 'screen-saver'); // Higher priority
+
+                    // Notify renderer
+                    this.sendToCharacter('system:idle', { isFullscreen: true });
+                }
             },
             onActive: () => {
-                console.log('System Active - Waking up...');
-                this.sendToCharacter('system:resume');
-                // Ensure character window is visible and on top after waking
-                this._restoreCharacterWindow();
+                console.log('System Active - Restoring window...');
+                this._restoreFromIdle();
             },
             onSuspend: () => {
                 console.log('System Suspend - Character will wait...');
@@ -447,6 +462,8 @@ export class MultiWindowManager {
             },
             onUnlockScreen: () => {
                 console.log('Screen Unlocked - Restoring character...');
+                this._restoreFromIdle();
+
                 // Restore window after unlock with delay for desktop to be ready
                 setTimeout(() => {
                     if (this._wasVisibleBeforeLock !== false) {
@@ -455,6 +472,22 @@ export class MultiWindowManager {
                 }, 1000);
             }
         });
+    }
+
+    /**
+     * Restore window from idle fullscreen state
+     */
+    _restoreFromIdle() {
+        if (this.characterWindow && !this.characterWindow.isDestroyed()) {
+            // Restore previous bounds if they exist
+            if (this.previousBounds) {
+                this.characterWindow.setBounds(this.previousBounds, true);
+                this.previousBounds = null; // Reset
+            }
+
+            this.characterWindow.setAlwaysOnTop(true, 'floating'); // Reset priority
+            this.sendToCharacter('system:resume');
+        }
     }
 
     /**

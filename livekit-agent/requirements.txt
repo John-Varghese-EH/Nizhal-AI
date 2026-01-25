@@ -1,0 +1,27 @@
+# LiveKit AI Agent Dependencies
+
+# Core LiveKit Agents SDK
+livekit-agents>=0.8.0
+livekit>=0.11.0
+
+# Speech-to-Text (Choose one or multiple)
+deepgram-sdk>=3.0.0      # Deepgram STT (200 hours free)
+assemblyai>=0.17.0       # AssemblyAI STT (5 hours free)
+# openai-whisper>=20230314  # Local Whisper (free, requires GPU)
+
+# Language Models (Choose one or multiple)
+openai>=1.0.0            # OpenAI GPT models
+# anthropic>=0.7.0       # Claude models
+# ollama>=0.1.0          # Local models via Ollama
+
+# Text-to-Speech (Choose one or multiple)
+elevenlabs>=0.2.0        # ElevenLabs TTS (premium quality)
+# TTS>=0.13.0            # Coqui TTS (local, free)
+
+# Audio processing
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Utilities
+python-dotenv>=1.0.0
+aiohttp>=3.9.0

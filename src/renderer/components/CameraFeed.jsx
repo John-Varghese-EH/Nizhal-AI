@@ -21,12 +21,12 @@ const CameraFeed = ({
     const [cameras, setCameras] = useState([]);
     const [currentCamera, setCurrentCamera] = useState(null);
 
-    useEffect(() => {
-        // Sync privacy mode with service
-        cameraService.setPrivacyMode(privacyMode);
-    }, [privacyMode]);
+    const isMounted = useRef(false);
+    const mountingRef = useRef(false);
 
     useEffect(() => {
+        isMounted.current = true;
+
         if (enabled && !privacyMode) {
             startCamera();
         } else {
@@ -34,44 +34,63 @@ const CameraFeed = ({
         }
 
         return () => {
+            isMounted.current = false;
             stopCamera();
         };
     }, [enabled, privacyMode]);
 
     const startCamera = async () => {
         setError(null);
+        if (mountingRef.current) return; // Prevent double init
+        mountingRef.current = true;
 
-        if (videoRef.current) {
-            const initialized = await cameraService.initialize(videoRef.current);
-            if (!initialized) {
-                setError('Failed to initialize camera');
-                return;
-            }
+        try {
+            if (videoRef.current) {
+                const initialized = await cameraService.initialize(videoRef.current);
+                if (!isMounted.current) return;
 
-            const success = await cameraService.startCamera();
-            if (success) {
-                setIsActive(true);
-
-                // Get available cameras
-                const available = await cameraService.getAvailableCameras();
-                setCameras(available);
-                if (available.length > 0) {
-                    setCurrentCamera(available[0].deviceId);
+                if (!initialized) {
+                    setError('Failed to initialize camera');
+                    return;
                 }
 
-                // Start frame capture if callback provided
-                if (onFrame) {
-                    cameraService.startCapturing(onFrame, 2000); // 1 frame every 2 seconds
+                const success = await cameraService.startCamera();
+                if (!isMounted.current) {
+                    // If unmounted during start, immediately stop to prevent orphaned stream
+                    cameraService.stopCamera();
+                    return;
                 }
-            } else {
-                setError('Camera access denied or unavailable');
+
+                if (success) {
+                    setIsActive(true);
+
+                    // Get available cameras
+                    const available = await cameraService.getAvailableCameras();
+                    if (isMounted.current) {
+                        setCameras(available);
+                        if (available.length > 0) {
+                            setCurrentCamera(available[0].deviceId);
+                        }
+
+                        // Start frame capture if callback provided
+                        if (onFrame) {
+                            cameraService.startCapturing(onFrame, 2000);
+                        }
+                    }
+                } else {
+                    setError('Camera access denied or unavailable');
+                }
             }
+        } finally {
+            mountingRef.current = false;
         }
     };
 
     const stopCamera = () => {
         cameraService.stopCamera();
-        setIsActive(false);
+        if (isMounted.current) {
+            setIsActive(false);
+        }
     };
 
     const switchCamera = async () => {

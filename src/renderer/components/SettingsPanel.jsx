@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../hooks/useTheme';
 
+import { lifeService } from '../../services/LifeService';
+import { weatherService } from '../../assistant/life-manager/Weather';
+
 /**
  * SettingsPanel - Unified Configuration Hub
  * 
@@ -11,13 +14,29 @@ import { useTheme } from '../hooks/useTheme';
  * - System: Voice, Hardware, Hotkeys
  * - About: Info & Reset
  */
-const SettingsPanel = ({ isOpen, onClose, settings, onSettingsChange, availableCharacters, onShare }) => {
+const SettingsPanel = ({ isOpen, onClose, settings, onSettingsChange, availableCharacters, onShare, userProfile, onProfileChange }) => {
     const [activeTab, setActiveTab] = useState('general');
+    const [lifeData, setLifeData] = useState({ memories: [], artifacts: [], routine: null, weather: null });
+
+    // Load life data when tab opens
+    React.useEffect(() => {
+        if (isOpen && activeTab === 'life') {
+            const loadLife = async () => {
+                const memories = await lifeService.getMemories();
+                const artifacts = await lifeService.getArtifacts();
+                const routine = await lifeService.getRoutine();
+                const weather = await weatherService.getWeather();
+                setLifeData({ memories, artifacts, routine, weather });
+            };
+            loadLife();
+        }
+    }, [isOpen, activeTab]);
 
     if (!isOpen) return null;
 
     const tabs = [
         { id: 'general', icon: '⚡', label: 'General' },
+        { id: 'life', icon: '🌱', label: 'Life' },
         { id: 'personality', icon: '🧠', label: 'Mind' },
         { id: 'system', icon: '⚙️', label: 'System' },
         { id: 'about', icon: 'ℹ️', label: 'About' }
@@ -105,6 +124,121 @@ const SettingsPanel = ({ isOpen, onClose, settings, onSettingsChange, availableC
                                     min={0.2} max={1} step={0.1}
                                     onChange={(v) => updateSetting('opacity', v)}
                                 />
+                            </SettingSection>
+                        </div>
+                    )}
+
+                    {activeTab === 'life' && userProfile && (
+                        <div className="space-y-6">
+                            {/* Identity Section */}
+                            <SettingSection title="Identity">
+                                <div className="flex gap-4 mb-4">
+                                    <div className="flex-1">
+                                        <label className="text-sm text-white/80 block mb-2">My Name</label>
+                                        <input
+                                            type="text"
+                                            value={userProfile.name || ''}
+                                            onChange={(e) => onProfileChange({ ...userProfile, name: e.target.value })}
+                                            className="w-full bg-black/40 border border-white/20 rounded-lg p-2 text-white text-sm focus:border-[var(--color-primary)] outline-none"
+                                            placeholder="What should I call you?"
+                                        />
+                                    </div>
+                                    {lifeData.weather && (
+                                        <div className="w-1/3 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-lg border border-white/10 p-2 flex flex-col items-center justify-center text-center">
+                                            <span className="text-xs text-white/60 mb-1">{lifeData.weather.location}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xl font-bold">{lifeData.weather.temp}°</span>
+                                                <span className="text-xs text-white/80">{lifeData.weather.condition}</span>
+                                            </div>
+                                            <span className="text-[10px] text-white/40 mt-1">H:{lifeData.weather.high}° L:{lifeData.weather.low}°</span>
+                                        </div>
+                                    )}
+                                </div>
+                                <Range
+                                    label="Vibe Check (Peaceful <-> Chaotic)"
+                                    value={userProfile.vibe || 50}
+                                    min={0} max={100} step={1}
+                                    onChange={(v) => onProfileChange({ ...userProfile, vibe: v })}
+                                />
+                            </SettingSection>
+
+                            {/* Relationship Section */}
+                            <SettingSection title="Relationship">
+                                <div className="grid grid-cols-1 gap-2">
+                                    {[
+                                        { id: 'friend', label: 'Best Friends', icon: '✨' },
+                                        { id: 'partner', label: 'Partners', icon: '💕' },
+                                        { id: 'assistant', label: 'Co-Workers', icon: '🚀' }
+                                    ].map(opt => (
+                                        <button
+                                            key={opt.id}
+                                            onClick={() => onProfileChange({ ...userProfile, relationship: opt.id })}
+                                            className={`p-3 rounded-lg text-left text-sm flex items-center gap-3 transition-all border ${userProfile.relationship === opt.id
+                                                ? 'bg-[var(--color-primary)]/20 border-[var(--color-primary)] text-white'
+                                                : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                                                }`}
+                                        >
+                                            <span className="text-xl">{opt.icon}</span>
+                                            <span className="font-medium">{opt.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </SettingSection>
+
+                            {/* Memory & Artifacts Section */}
+                            <SettingSection title="Memories & Artifacts">
+                                <div className="space-y-3">
+                                    <div className="p-3 rounded-lg bg-black/20 border border-white/5">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-xs font-bold text-white/60">LATEST MEMORY</span>
+                                            <span className="text-[10px] text-white/30">{lifeData.memories[0]?.date}</span>
+                                        </div>
+                                        <p className="text-sm text-white/80 italic">"{lifeData.memories[0]?.text || "No memories yet..."}"</p>
+                                    </div>
+
+                                    <div className="flex gap-2">
+                                        <div className="flex-1 p-3 rounded-lg bg-white/5 flex flex-col items-center">
+                                            <span className="text-2xl mb-1">🧠</span>
+                                            <span className="text-xl font-bold">{lifeData.memories.length}</span>
+                                            <span className="text-[10px] text-white/40 uppercase">Memories</span>
+                                        </div>
+                                        <div className="flex-1 p-3 rounded-lg bg-white/5 flex flex-col items-center">
+                                            <span className="text-2xl mb-1">📦</span>
+                                            <span className="text-xl font-bold">{lifeData.artifacts.length}</span>
+                                            <span className="text-[10px] text-white/40 uppercase">Artifacts</span>
+                                        </div>
+                                    </div>
+
+                                    <button className="w-full py-2 rounded bg-white/5 hover:bg-white/10 text-xs text-white/60 transition-colors">
+                                        View All Memories
+                                    </button>
+                                </div>
+                            </SettingSection>
+
+                            {/* Routine Section */}
+                            <SettingSection title="Daily Routine">
+                                {lifeData.routine ? (
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="p-2 rounded bg-white/5">
+                                            <label className="text-xs text-white/40 block">Wake Up</label>
+                                            <span className="text-sm font-mono text-white/80">{lifeData.routine.wakeUp}</span>
+                                        </div>
+                                        <div className="p-2 rounded bg-white/5">
+                                            <label className="text-xs text-white/40 block">Sleep</label>
+                                            <span className="text-sm font-mono text-white/80">{lifeData.routine.sleep}</span>
+                                        </div>
+                                        <div className="p-2 rounded bg-white/5">
+                                            <label className="text-xs text-white/40 block">Work Start</label>
+                                            <span className="text-sm font-mono text-white/80">{lifeData.routine.workStart}</span>
+                                        </div>
+                                        <div className="p-2 rounded bg-white/5">
+                                            <label className="text-xs text-white/40 block">Work End</label>
+                                            <span className="text-sm font-mono text-white/80">{lifeData.routine.workEnd}</span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="text-center text-xs text-white/40 py-2">Loading routine...</div>
+                                )}
                             </SettingSection>
                         </div>
                     )}

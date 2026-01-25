@@ -84,7 +84,7 @@ export class ContextManager {
 
     _load() {
         if (!this.store) return;
-        const saved = this.store.get('ai.context');
+        const saved = this.store.get('ai.memory'); // Changed from 'ai.context' to avoid schema conflict
         if (saved) {
             this.memory = { ...this.memory, ...saved };
         }
@@ -92,7 +92,7 @@ export class ContextManager {
 
     _save() {
         if (!this.store) return;
-        this.store.set('ai.context', this.memory);
+        this.store.set('ai.memory', this.memory); // Changed from 'ai.context' to avoid schema conflict
     }
 }
 

@@ -337,16 +337,22 @@ export class VRMAAnimationService {
         return { preset, custom };
     }
 
-    /**
-     * Play an animation by name
-     * @param {string} name - Animation name
-     * @param {Object} options - Playback options
-     */
     play(name, options = {}) {
         const animation = this.animations.get(name);
         if (!animation) {
             console.warn(`[VRMAAnimationService] Animation not found: ${name}`);
             return false;
+        }
+
+        // Prevent restarting the same looping animation if it's already playing
+        if (this.currentAnimation === name && this.state === AnimationState.PLAYING) {
+            const currentAction = animation.action;
+            if (currentAction && currentAction.isRunning() && currentAction.loop === THREE.LoopRepeat) {
+                // It's already playing and looping, perfectly fine to do nothing
+                // Just update timeScale if needed
+                if (options.timeScale) currentAction.timeScale = options.timeScale;
+                return true;
+            }
         }
 
         const {
@@ -355,26 +361,44 @@ export class VRMAAnimationService {
             timeScale = 1.0
         } = options;
 
-        // Fade out current animation
+        const newAction = animation.action;
+
+        // Setup the new action
+        newAction.enabled = true;
+        newAction.setEffectiveTimeScale(timeScale);
+        newAction.setEffectiveWeight(1); // Default to 1, crossFade will adjust if needed
+        newAction.setLoop(loop, Infinity);
+
+        // Handle Cross-fading
         if (this.currentAnimation && this.currentAnimation !== name) {
             const current = this.animations.get(this.currentAnimation);
-            if (current?.action) {
-                current.action.fadeOut(fadeIn);
-            }
-        }
+            const currentAction = current?.action;
 
-        // Configure and play new animation
-        const { action } = animation;
-        action.reset();
-        action.setLoop(loop, Infinity);
-        action.timeScale = timeScale;
-        action.fadeIn(fadeIn);
-        action.play();
+            if (currentAction && currentAction.isRunning()) {
+                // Reset new action to start
+                newAction.reset();
+                newAction.play();
+
+                // Crossfade: transitions weights from current -> new
+                // This ensures total weight stays around 1.0, preventing T-pose dips
+                currentAction.crossFadeTo(newAction, fadeIn, true);
+            } else {
+                // Old action not running, just fade in new one from 0
+                newAction.reset();
+                newAction.play();
+                newAction.fadeIn(fadeIn);
+            }
+        } else {
+            // No previous animation (or restarting same one), fade in from rest pose
+            newAction.reset();
+            newAction.play();
+            newAction.fadeIn(fadeIn);
+        }
 
         this.currentAnimation = name;
         this.state = AnimationState.PLAYING;
 
-        console.log(`[VRMAAnimationService] Playing: ${name}`);
+        console.log(`[VRMAAnimationService] Playing: ${name} (Crossfade: ${fadeIn}s)`);
         return true;
     }
 

@@ -12,6 +12,13 @@ const validChannels = {
     payment: ['checkout', 'verify'],
     license: ['check', 'unlock', 'getUnlocked'],
     marketplace: ['getPersonas', 'purchase', 'download'],
+    // LiveKit Voice/Video APIs
+    livekit: ['connect', 'disconnect', 'getStatus', 'startAgent', 'stopAgent', 'restartAgent', 'updatePersonality'],
+    // Android Control
+    adb: ['check', 'connect', 'disconnect', 'getDevices', 'tap', 'swipe', 'type', 'key', 'home', 'back', 'launch', 'close', 'screenshot', 'info'],
+    // Onboarding & Avatar
+    onboarding: ['complete'],
+    avatar: ['speak'],
     app: ['getTheme', 'openExternal', 'getVersion'],
     state: ['get', 'set', 'batch', 'subscribe', 'getPersonalityConfig'],
     navigate: []
@@ -46,6 +53,13 @@ contextBridge.exposeInMainWorld('nizhal', {
     license: createSecureApi('license'),
     marketplace: createSecureApi('marketplace'),
     privacy: createSecureApi('privacy'),
+    // LiveKit Voice/Video
+    livekit: createSecureApi('livekit'),
+    // Android
+    adb: createSecureApi('adb'),
+    // Onboarding & Avatar
+    onboarding: createSecureApi('onboarding'),
+    avatar: createSecureApi('avatar'),
     app: createSecureApi('app'),
 
     // Unified State API

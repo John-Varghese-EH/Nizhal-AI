@@ -19,7 +19,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 const PERSONALITY_MODES = [
     { id: 'gf', name: 'GF', icon: '💕', description: 'Affectionate & Caring' },
     { id: 'bf', name: 'BF', icon: '🛡️', description: 'Supportive & Protective' },
-    { id: 'jarvis', name: 'JARVIS', icon: '🤖', description: 'Professional & Efficient' }
+    { id: 'jarvis', name: 'JARVIS', icon: '🤖', description: 'Professional & Efficient' },
+    { id: 'lachu', name: 'LACHU', icon: '😘', description: 'Mallu Queen' },
+    { id: 'auto', name: 'AUTO', icon: '🔮', description: 'Auto-Detect' }
 ];
 
 // Emotion triggers

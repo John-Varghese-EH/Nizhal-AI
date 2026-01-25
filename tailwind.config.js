@@ -7,16 +7,26 @@ export default {
     theme: {
         extend: {
             colors: {
+                // Semantic System
+                bg: {
+                    main: 'var(--bg-main)',
+                    card: 'var(--bg-card)',
+                    panel: 'var(--bg-panel)'
+                },
+                text: {
+                    main: 'var(--text-main)',
+                    muted: 'var(--text-muted)',
+                    primary: 'var(--primary)'
+                },
                 primary: {
-                    DEFAULT: '#6366f1',
-                    dark: '#4f46e5',
-                    light: '#818cf8'
+                    DEFAULT: 'var(--primary)',
+                    dim: 'var(--primary-dim)',
+                    glow: 'var(--primary-glow)'
                 },
                 accent: {
-                    DEFAULT: '#ec4899',
-                    dark: '#db2777',
-                    light: '#f472b6'
-                }
+                    DEFAULT: 'var(--accent)'
+                },
+                border: 'var(--border-color)'
             },
             fontFamily: {
                 sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
@@ -29,11 +39,12 @@ export default {
                 'spin-slow': 'spin 8s linear infinite'
             },
             backdropBlur: {
-                xs: '2px'
+                xs: '2px',
+                DEFAULT: '20px'
             },
             boxShadow: {
-                'glow': '0 0 20px rgba(99, 102, 241, 0.4)',
-                'glow-lg': '0 0 40px rgba(99, 102, 241, 0.6)'
+                'glow': '0 0 20px var(--primary-glow)',
+                'glow-lg': '0 0 40px var(--primary-glow)'
             }
         }
     },

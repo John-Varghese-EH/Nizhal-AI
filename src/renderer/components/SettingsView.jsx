@@ -308,6 +308,21 @@ const SettingsView = ({ onBack, onPersonaChange, privacyMode, onPrivacyToggle })
                                     </SettingRow>
                                 </div>
 
+                                <div className="pt-4 border-t border-white/5">
+                                    <h3 className="text-sm font-medium text-white/70 mb-3">Setup & Reset</h3>
+                                    <motion.button
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={async () => {
+                                            await handlePreferenceChange('onboardingComplete', false);
+                                            window.location.reload(); // Reload to trigger App.jsx check
+                                        }}
+                                        className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-medium text-indigo-300"
+                                    >
+                                        Restart Onboarding Wizard
+                                    </motion.button>
+                                </div>
+
+
                                 {/* Support Links */}
                                 <div className="border-t border-white/5 pt-4 space-y-3">
                                     <h3 className="text-sm font-medium text-white/70">Support & Links</h3>
@@ -846,63 +861,65 @@ const SettingsView = ({ onBack, onPersonaChange, privacyMode, onPrivacyToggle })
             </div>
 
             {/* API Key Modal */}
-            {showApiKeyModal && (
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-                    onClick={() => setShowApiKeyModal(null)}
-                >
+            {
+                showApiKeyModal && (
                     <motion.div
-                        initial={{ scale: 0.9 }}
-                        animate={{ scale: 1 }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="bg-gray-900 rounded-2xl p-6 max-w-sm w-full border border-white/10"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+                        onClick={() => setShowApiKeyModal(null)}
                     >
-                        <h3 className="text-lg font-bold text-white mb-2">
-                            {apiKeyConfigs.find(a => a.id === showApiKeyModal)?.name || 'API Key'}
-                        </h3>
-                        <p className="text-xs text-white/50 mb-4">
-                            {apiKeyConfigs.find(a => a.id === showApiKeyModal)?.description}
-                        </p>
-
-                        <input
-                            type="password"
-                            value={apiKeyValue}
-                            onChange={(e) => setApiKeyValue(e.target.value)}
-                            placeholder="Enter your API key"
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/30 focus:outline-none focus:border-indigo-500/50 mb-3"
-                        />
-
-                        <motion.button
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => openExternal(apiKeyConfigs.find(a => a.id === showApiKeyModal)?.url || '#')}
-                            className="w-full text-xs text-indigo-400 hover:text-indigo-300 mb-4 text-left"
+                        <motion.div
+                            initial={{ scale: 0.9 }}
+                            animate={{ scale: 1 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-gray-900 rounded-2xl p-6 max-w-sm w-full border border-white/10"
                         >
-                            Get API key →
-                        </motion.button>
+                            <h3 className="text-lg font-bold text-white mb-2">
+                                {apiKeyConfigs.find(a => a.id === showApiKeyModal)?.name || 'API Key'}
+                            </h3>
+                            <p className="text-xs text-white/50 mb-4">
+                                {apiKeyConfigs.find(a => a.id === showApiKeyModal)?.description}
+                            </p>
 
-                        <div className="flex gap-2">
+                            <input
+                                type="password"
+                                value={apiKeyValue}
+                                onChange={(e) => setApiKeyValue(e.target.value)}
+                                placeholder="Enter your API key"
+                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/30 focus:outline-none focus:border-indigo-500/50 mb-3"
+                            />
+
                             <motion.button
                                 whileTap={{ scale: 0.95 }}
-                                onClick={() => setShowApiKeyModal(null)}
-                                className="flex-1 py-2 bg-white/10 text-white rounded-xl"
+                                onClick={() => openExternal(apiKeyConfigs.find(a => a.id === showApiKeyModal)?.url || '#')}
+                                className="w-full text-xs text-indigo-400 hover:text-indigo-300 mb-4 text-left"
                             >
-                                Cancel
+                                Get API key →
                             </motion.button>
-                            <motion.button
-                                whileTap={{ scale: 0.95 }}
-                                onClick={handleSaveApiKey}
-                                disabled={isSaving}
-                                className="flex-1 py-2 bg-indigo-600 text-white rounded-xl disabled:opacity-50"
-                            >
-                                {isSaving ? 'Saving...' : 'Save'}
-                            </motion.button>
-                        </div>
+
+                            <div className="flex gap-2">
+                                <motion.button
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => setShowApiKeyModal(null)}
+                                    className="flex-1 py-2 bg-white/10 text-white rounded-xl"
+                                >
+                                    Cancel
+                                </motion.button>
+                                <motion.button
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={handleSaveApiKey}
+                                    disabled={isSaving}
+                                    className="flex-1 py-2 bg-indigo-600 text-white rounded-xl disabled:opacity-50"
+                                >
+                                    {isSaving ? 'Saving...' : 'Save'}
+                                </motion.button>
+                            </div>
+                        </motion.div>
                     </motion.div>
-                </motion.div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };
 

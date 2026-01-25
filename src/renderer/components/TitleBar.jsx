@@ -14,7 +14,7 @@ const TitleBar = ({ personaName, clickThrough, onClickThroughToggle, onMaximize,
     const handleClose = () => window.nizhal?.window.close();
 
     return (
-        <div className="h-12 flex items-center justify-between px-4 drag-region bg-slate-900/50 border-b border-white/5">
+        <div className="h-12 flex items-center justify-between px-4 drag-region bg-bg-card border-b border-border transition-colors duration-300">
             <div className="flex items-center gap-3 no-drag">
                 <div className={`w-2 h-2 rounded-full ${privacyMode ? 'bg-green-400' : 'bg-cyan-400'} animate-pulse`} />
                 <span className="text-sm font-light tracking-wider text-white">{personaName}</span>

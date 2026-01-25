@@ -3,66 +3,76 @@
 @tailwind utilities;
 
 :root {
-  /* Default/Shared Strings */
-  --bg-primary: #0f0f1a;
-  --bg-secondary: #1a1a2e;
-  --text-primary: #ffffff;
+  /* Semantic Color System */
+  /* Default: Cyberpunk/Hacker (Dark Blue/Cyan) */
+  --bg-main: #020617;
+  /* slate-950 */
+  --bg-card: rgba(15, 23, 42, 0.4);
+  /* More transparent for glass */
+  --bg-panel: rgba(15, 23, 42, 0.7);
+
+  --text-main: #f8fafc;
+  /* slate-50 */
+  --text-muted: #94a3b8;
+  /* slate-400 */
+
+  --primary: #06b6d4;
+  /* cyan-500 */
+  --primary-dim: rgba(6, 182, 212, 0.15);
+  --primary-glow: rgba(6, 182, 212, 0.6);
+  --primary-gradient: linear-gradient(135deg, #06b6d4, #3b82f6);
+
+  --accent: #22c55e;
+  /* green-500 */
+  --danger: #ef4444;
+  /* red-500 */
+
+  --border-color: rgba(255, 255, 255, 0.08);
+  --glass-blur: 24px;
+  --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
 }
 
-/* 1. GF Mode (Soft, Pink, Friendly) */
+/* Theme: Javirs (Romantic/Pink) */
+[data-theme='javirs'],
 [data-theme='gf'] {
-  --color-primary: #ec4899;
-  /* Pink-500 */
-  --color-primary-dark: #db2777;
-  --color-accent: #f472b6;
-  --bg-card: rgba(40, 10, 30, 0.7);
-  --border-color: rgba(236, 72, 153, 0.3);
-  --glow-color: rgba(236, 72, 153, 0.5);
-  --border-radius-base: 24px;
+  --bg-main: #280a1e;
+  --bg-card: rgba(80, 10, 40, 0.4);
+  --bg-panel: rgba(56, 13, 38, 0.7);
+
+  --primary: #ec4899;
+  /* pink-500 */
+  --primary-dim: rgba(236, 72, 153, 0.15);
+  --primary-glow: rgba(236, 72, 153, 0.6);
+  --primary-gradient: linear-gradient(135deg, #ec4899, #f43f5e);
+
+  --accent: #f43f5e;
+  /* rose-500 */
+  --border-color: rgba(236, 72, 153, 0.2);
 }
 
-/* 2. BF Mode (Sharp, Blue, Cool) */
-[data-theme='bf'] {
-  --color-primary: #3b82f6;
-  /* Blue-500 */
-  --color-primary-dark: #2563eb;
-  --color-accent: #60a5fa;
-  --bg-card: rgba(10, 25, 40, 0.8);
-  --border-color: rgba(59, 130, 246, 0.3);
-  --glow-color: rgba(59, 130, 246, 0.5);
-  --border-radius-base: 8px;
-  /* Sharper */
+/* Theme: Hackathon (Matrix/Green) */
+[data-theme='hackathon'] {
+  --bg-main: #000000;
+  --bg-card: rgba(0, 20, 0, 0.6);
+  --bg-panel: rgba(5, 26, 5, 0.8);
+
+  --primary: #00ff41;
+  /* Matrix Green */
+  --primary-dim: rgba(0, 255, 65, 0.15);
+  --primary-glow: rgba(0, 255, 65, 0.6);
+  --primary-gradient: linear-gradient(135deg, #00ff41, #008f11);
+
+  --accent: #008f11;
+  --border-color: rgba(0, 255, 65, 0.3);
 }
 
-/* 3. JARVIS Mode (Tech, Cyan, Futuristic) */
-[data-theme='jarvis'] {
-  --color-primary: #06b6d4;
-  /* Cyan-500 */
-  --color-primary-dark: #0891b2;
-  --color-accent: #00ffcc;
-  --bg-card: rgba(0, 20, 30, 0.9);
-  --border-color: rgba(6, 182, 212, 0.4);
-  --glow-color: rgba(6, 182, 212, 0.6);
-  --border-radius-base: 4px;
-  /* Techy */
-  --tech-grid: url("data:image/svg+xml,%3Csvg width='40' height='40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h40v40H0z' fill='none'/%3E%3Cpath d='M0 40h40V0H0v40zM39 1v38H1V1h38z' fill='%2306b6d4' fill-opacity='0.05'/%3E%3C/svg%3E");
-}
-
-/* Default Fallback (GF) */
-:root:not([data-theme]) {
-  --color-primary: #ec4899;
-  --color-primary-dark: #db2777;
-  --color-accent: #f472b6;
-  --bg-card: rgba(26, 26, 46, 0.8);
-  --border-color: rgba(236, 72, 153, 0.3);
-  --glow-color: rgba(236, 72, 153, 0.4);
-  --border-radius-base: 16px;
-}
-
+/* Global Reset */
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html,
@@ -71,20 +81,85 @@ body,
   height: 100%;
   width: 100%;
   overflow: hidden;
-}
-
-body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background: transparent;
-  color: var(--text-primary);
+  /* Electron transparency */
+  color: var(--text-main);
+  user-select: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  user-select: none;
 }
 
+/* Utility Classes */
+.bg-main {
+  background-color: var(--bg-main);
+}
+
+.text-main {
+  color: var(--text-main);
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.text-primary {
+  color: var(--primary);
+}
+
+/* Premium Glass Effect */
+.glass-panel {
+  background: var(--bg-card);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: var(--glass-border);
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  /* Subtle highlight */
+  box-shadow: var(--glass-shadow);
+}
+
+.glass-panel-dark {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: var(--glass-border);
+}
+
+.glass-button {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--primary);
+  box-shadow: 0 0 15px var(--primary-dim);
+  transform: translateY(-1px);
+}
+
+.glass-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Gradients */
+.text-gradient {
+  background: var(--primary-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.bg-gradient-primary {
+  background: var(--primary-gradient);
+}
+
+/* Scrollbar (Slim & Elegant) */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -92,45 +167,48 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-primary);
+  background: var(--primary);
 }
 
-.glass-panel {
-  background: var(--bg-card);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
+/* Animation Keyframes */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.glow-effect {
-  box-shadow: 0 0 20px var(--glow-color);
-}
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
 
-.drag-region {
-  -webkit-app-region: drag;
-  app-region: drag;
-}
-
-.no-drag {
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @keyframes pulse-glow {
 
   0%,
   100% {
-    box-shadow: 0 0 20px var(--glow-color);
+    box-shadow: 0 0 10px var(--primary-dim);
   }
 
   50% {
-    box-shadow: 0 0 40px var(--glow-color), 0 0 60px var(--glow-color);
+    box-shadow: 0 0 20px var(--primary-glow);
   }
 }
 
@@ -142,61 +220,31 @@ body {
   }
 
   50% {
-    transform: translateY(-10px);
+    transform: translateY(-5px);
   }
 }
 
-@keyframes morph {
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
 
-  0%,
-  100% {
-    border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
-  }
-
-  50% {
-    border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
-  }
+.animate-slide-in {
+  animation: slideInRight 0.4s ease-out forwards;
 }
 
 .animate-pulse-glow {
-  animation: pulse-glow 2s ease-in-out infinite;
+  animation: pulse-glow 3s infinite;
 }
 
 .animate-float {
-  animation: float 3s ease-in-out infinite;
+  animation: float 6s ease-in-out infinite;
 }
 
-.animate-morph {
-  animation: morph 8s ease-in-out infinite;
+/* Drag Region Helper */
+.drag-region {
+  -webkit-app-region: drag;
 }
 
-.gradient-text {
-  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.mood-happy {
-  --mood-color: #10b981;
-}
-
-.mood-neutral {
-  --mood-color: #6366f1;
-}
-
-.mood-concerned {
-  --mood-color: #f59e0b;
-}
-
-.mood-protective {
-  --mood-color: #ef4444;
-}
-
-.mood-playful {
-  --mood-color: #ec4899;
-}
-
-.mood-thoughtful {
-  --mood-color: #8b5cf6;
+.no-drag {
+  -webkit-app-region: no-drag;
 }

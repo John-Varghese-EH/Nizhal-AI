@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LiveKit Voice AI Agent</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- LiveKit Client SDK -->
+    <script src="https://unpkg.com/livekit-client@latest/dist/livekit-client.umd.min.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🎙️ LiveKit Voice AI Agent</h1>
+            <p class="subtitle">Real-time voice communication with AI</p>
+        </header>
+
+        <!-- Connection Panel -->
+        <div class="panel">
+            <h2>🔌 Connection</h2>
+            <div class="form-group">
+                <label for="backend-url">Backend URL</label>
+                <input type="text" id="backend-url" value="http://localhost:3000" placeholder="http://localhost:3000">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="room-name">Room Name</label>
+                    <input type="text" id="room-name" value="voice-ai-room" placeholder="Enter room name">
+                </div>
+                <div class="form-group">
+                    <label for="participant-name">Your Name</label>
+                    <input type="text" id="participant-name" value="User" placeholder="Enter your name">
+                </div>
+            </div>
+            <button id="join-btn" class="btn btn-primary">Join Room</button>
+            <button id="leave-btn" class="btn btn-secondary" disabled>Leave Room</button>
+        </div>
+
+        <!-- Controls Panel -->
+        <div class="panel">
+            <h2>🎛️ Controls</h2>
+            <div class="controls">
+                <button id="toggle-mic" class="btn btn-control" disabled>
+                    <span class="icon">🎤</span>
+                    <span class="label">Microphone: Off</span>
+                </button>
+                <button id="toggle-camera" class="btn btn-control" disabled>
+                    <span class="icon">📹</span>
+                    <span class="label">Camera: Off</span>
+                </button>
+                <button id="toggle-screen" class="btn btn-control" disabled>
+                    <span class="icon">🖥️</span>
+                    <span class="label">Share Screen</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Status Panel -->
+        <div class="panel">
+            <h2>📊 Status</h2>
+            <div class="status-grid">
+                <div class="status-item">
+                    <span class="status-label">Connection:</span>
+                    <span id="connection-status" class="status-value disconnected">Disconnected</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Room:</span>
+                    <span id="room-status" class="status-value">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Participants:</span>
+                    <span id="participant-count" class="status-value">0</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Quality:</span>
+                    <span id="quality-status" class="status-value">-</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Participants Panel -->
+        <div class="panel">
+            <h2>👥 Participants</h2>
+            <div id="participants-list" class="participants-list">
+                <p class="empty-state">No participants yet</p>
+            </div>
+        </div>
+
+        <!-- Video Grid -->
+        <div class="panel">
+            <h2>📺 Video Streams</h2>
+            <div id="video-grid" class="video-grid">
+                <p class="empty-state">No video streams</p>
+            </div>
+        </div>
+
+        <!-- Logs Panel -->
+        <div class="panel logs-panel">
+            <h2>📝 Logs</h2>
+            <div id="logs" class="logs"></div>
+            <button id="clear-logs" class="btn btn-small">Clear Logs</button>
+        </div>
+    </div>
+
+    <script src="client.js"></script>
+</body>
+
+</html>

@@ -147,7 +147,27 @@ class GeminiLiveService {
                         }
                     },
                     systemInstruction: systemInstruction || 'You are Nizhal AI, a helpful and friendly desktop companion assistant.',
-                    tools: tools.length > 0 ? tools : undefined
+                    tools: [
+                        ...tools,
+                        {
+                            functionDeclarations: [
+                                {
+                                    name: "join_livekit_room",
+                                    description: "Join a LiveKit voice/video room for communication.",
+                                    parameters: {
+                                        type: "OBJECT",
+                                        properties: {
+                                            roomName: {
+                                                type: "STRING",
+                                                description: "Name of the room to join (e.g., 'team-work', 'john-personal')."
+                                            }
+                                        },
+                                        required: ["roomName"]
+                                    }
+                                }
+                            ]
+                        }
+                    ]
                 }
             });
 
@@ -289,6 +309,17 @@ class GeminiLiveService {
                         await window.nizhal.system.launchApp(args.appName);
                         result = { success: true, message: `Opened ${args.appName}` };
                     }
+                    break;
+
+                case 'join_livekit_room':
+                    const roomName = args.roomName || 'john-personal';
+                    // Dynamic import to avoid circular dependency if possible, or assume global assistant
+                    // Since assistant is imported in App.jsx, we can access it if we export it globally or import here
+                    // We will import 'assistant' at top of file, or use window object if attached
+                    // Better: Import it.
+                    const { default: assistant } = await import('../assistant/index.js');
+                    await assistant.roomManager.connect(roomName);
+                    result = { success: true, message: `Joined voice room: ${roomName}` };
                     break;
 
                 default:

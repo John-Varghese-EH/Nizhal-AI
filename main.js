@@ -15,16 +15,22 @@ import { appStateService } from './src/core/AppStateService.js';
 import { AIService } from './src/services/AIService.js';
 import { NizhalAI } from './src/core/NizhalAI.js';
 import { VoiceService } from './src/services/VoiceService.js';
-import { PaymentService } from './src/services/PaymentService.js';
-import { LicenseService } from './src/services/LicenseService.js';
-import { PersonaMarketplace } from './src/services/PersonaMarketplace.js';
+// FREE SERVICES (Main Process Only)
+import { desktopAutomation } from './src/services/DesktopAutomationService.js';
+import { adbControl } from './src/services/ADBControlService.js';
+import { networkUtils } from './src/services/NetworkUtilsService.js';
+import { PERSONALITIES, getPersonality, getGreeting } from './src/core/PersonalityProfiles.js';
+// LiveKit Integration
+import { LiveKitService } from './src/services/LiveKitService.js';
+import { AgentProcessManager } from './src/services/AgentProcessManager.js';
+// Note: LocalVoice and EmotionDetector are renderer-only (use browser APIs)
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
-// Window manager for dual-window architecture
+// Global service references
 let windowManager = null;
 let systemBridge = null;
 let personalityCore = null;
@@ -33,9 +39,11 @@ let memoryService = null;
 let aiService = null;
 let nizhalAI = null;
 let voiceService = null;
-let paymentService = null;
-let licenseService = null;
-let personaMarketplace = null;
+// LiveKit services
+let livekitService = null;
+let agentManager = null;
+// FREE services (singletons imported)
+let currentPersonality = 'gf'; // Default personality
 
 async function initializeServices() {
   // Initialize centralized state service first
@@ -46,22 +54,42 @@ async function initializeServices() {
   await memoryService.initialize();
 
   personaManager = new PersonaManager(personalityCore);
-  licenseService = new LicenseService(app.getPath('userData'));
-  await licenseService.initialize();
 
   aiService = new AIService(personaManager, memoryService);
   await aiService.initialize();
   nizhalAI = new NizhalAI(aiService, personalityCore, appStateService);
 
   voiceService = new VoiceService();
-  paymentService = new PaymentService();
-  personaMarketplace = new PersonaMarketplace(licenseService, paymentService);
 
-  // Sync initial personality mode from state to personaManager
-  const savedPersonaId = appStateService.get('ai.activePersonaId');
-  if (savedPersonaId) {
-    personaManager.setActivePersona(savedPersonaId);
+  // FREE SERVICES INITIALIZATION
+  // Note: LocalVoice is renderer-only (uses browser APIs)
+  // It will be initialized in the renderer process, not here
+
+  // ADB: Check if ADB is installed
+  const adbInstalled = await adbControl.checkADBInstalled();
+  if (adbInstalled) {
+    console.log('[Main] ✅ ADB available for Android control');
+  } else {
+    console.log('[Main] ⚠️ ADB not found. Android control disabled.');
   }
+
+  // Sync initial personality mode from state
+  const savedPersonaId = appStateService.get('ai.activePersonaId') || 'gf';
+  currentPersonality = savedPersonaId;
+  // Voice personality will be set by renderer process
+
+  // LIVEKIT INITIALIZATION
+  livekitService = new LiveKitService();
+  if (livekitService.isConfigured()) {
+    console.log('[Main] ✅ LiveKit configured for real-time voice');
+    agentManager = new AgentProcessManager(livekitService);
+  } else {
+    console.log('[Main] ⚠️ LiveKit not configured. Set LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET in .env');
+  }
+
+  console.log('[Main] 🎭 Active personality:', currentPersonality);
+  console.log('[Main] ✅ FREE edition initialized (Main process services only)');
+  console.log('[Main] 📢 Voice & Emotion detection available in renderer');
 }
 
 function setupSecurityPolicy() {
@@ -84,6 +112,23 @@ function setupSecurityPolicy() {
 
 // Register global productivity shortcuts
 function registerGlobalShortcuts() {
+  // PERSONALITY SWITCHING (NEW FREE EDITION)
+  globalShortcut.register('CommandOrControl+1', () => {
+    // Switch to GF personality
+    switchPersonality('gf');
+  });
+
+  globalShortcut.register('CommandOrControl+2', () => {
+    // Switch to BF personality
+    switchPersonality('bf');
+  });
+
+  globalShortcut.register('CommandOrControl+3', () => {
+    // Switch to JARVIS personality
+    switchPersonality('jarvis');
+  });
+
+  // Productivity shortcuts
   globalShortcut.register('CommandOrControl+Shift+Z', () => {
     // Zen Mode
     windowManager.broadcast('hotkey:zen');
@@ -99,7 +144,54 @@ function registerGlobalShortcuts() {
     windowManager.broadcast('hotkey:health');
   });
 
-  console.log('[Main] Global shortcuts registered');
+  // Personality Mode Shortcuts (Ctrl+1 to Ctrl+5)
+  globalShortcut.register('CommandOrControl+1', () => {
+    currentPersonality = 'gf';
+    appStateService.setPersonalityMode('gf');
+    windowManager.broadcast('personality:changed', { mode: 'gf', source: 'hotkey' });
+    // Sync LiveKit agent
+    if (agentManager?.getStatus().isRunning) {
+      agentManager.updatePersonality('gf');
+    }
+  });
+
+  globalShortcut.register('CommandOrControl+2', () => {
+    currentPersonality = 'bf';
+    appStateService.setPersonalityMode('bf');
+    windowManager.broadcast('personality:changed', { mode: 'bf', source: 'hotkey' });
+    if (agentManager?.getStatus().isRunning) {
+      agentManager.updatePersonality('bf');
+    }
+  });
+
+  globalShortcut.register('CommandOrControl+3', () => {
+    currentPersonality = 'jarvis';
+    appStateService.setPersonalityMode('jarvis');
+    windowManager.broadcast('personality:changed', { mode: 'jarvis', source: 'hotkey' });
+    if (agentManager?.getStatus().isRunning) {
+      agentManager.updatePersonality('jarvis');
+    }
+  });
+
+  globalShortcut.register('CommandOrControl+4', () => {
+    currentPersonality = 'lachu';
+    appStateService.setPersonalityMode('lachu');
+    windowManager.broadcast('personality:changed', { mode: 'lachu', source: 'hotkey' });
+    if (agentManager?.getStatus().isRunning) {
+      agentManager.updatePersonality('lachu');
+    }
+  });
+
+  globalShortcut.register('CommandOrControl+5', () => {
+    currentPersonality = 'auto';
+    appStateService.setPersonalityMode('auto');
+    windowManager.broadcast('personality:changed', { mode: 'auto', source: 'hotkey' });
+    if (agentManager?.getStatus().isRunning) {
+      agentManager.updatePersonality('auto');
+    }
+  });
+
+  console.log('[Main] Global shortcuts registered (Productivity + Personality Modes)');
 }
 
 async function createWindows() {
@@ -341,6 +433,110 @@ function setupIPC() {
   ipcMain.handle('marketplace:purchase', (_, personaId, gateway) => personaMarketplace?.purchasePersona(personaId, gateway, windowManager?.chatWindow));
   ipcMain.handle('marketplace:download', (_, personaId) => personaMarketplace?.downloadPersona(personaId));
 
+  // Onboarding
+  ipcMain.handle('onboarding:complete', async (_, data) => {
+    // Save onboarding data to preferences
+    const prefs = await memoryService?.getUserPreferences() || {};
+    prefs.onboardingComplete = true;
+    prefs.onboardingData = data;
+    await memoryService?.setUserPreferences(prefs);
+    return true;
+  });
+
+  // Avatar speak (for proactive notifications)
+  ipcMain.handle('avatar:speak', (_, message) => {
+    windowManager?.sendToCharacter('avatar:speak', message);
+    return true;
+  });
+
+  // LiveKit - Voice Connection
+  ipcMain.handle('livekit:connect', async (_, userName, roomName) => {
+    if (!livekitService?.isConfigured()) {
+      return { success: false, error: 'LiveKit not configured' };
+    }
+
+    try {
+      // Get token for specific room or auto-generated one
+      const tokenData = await livekitService.getUserRoomToken(userName, currentPersonality, roomName);
+
+      // Start agent if not running
+      if (agentManager && !agentManager.getStatus().isRunning) {
+        await agentManager.start(currentPersonality, tokenData.roomName);
+      }
+
+      return { success: true, ...tokenData };
+    } catch (error) {
+      console.error('[LiveKit] Connection failed:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('livekit:disconnect', async () => {
+    // Just return success, room will auto-cleanup
+    // Keep agent running for next connection
+    return { success: true };
+  });
+
+  ipcMain.handle('livekit:getStatus', () => {
+    return {
+      configured: livekitService?.isConfigured() || false,
+      agent: agentManager?.getStatus() || null
+    };
+  });
+
+  // LiveKit - Agent Management
+  ipcMain.handle('livekit:startAgent', async (_, personality, roomName) => {
+    if (!agentManager) {
+      return { success: false, error: 'Agent manager not initialized' };
+    }
+    return await agentManager.start(personality || currentPersonality, roomName);
+  });
+
+  ipcMain.handle('livekit:stopAgent', async () => {
+    if (!agentManager) return { success: true };
+    return await agentManager.stop();
+  });
+
+  ipcMain.handle('livekit:restartAgent', async (_, personality) => {
+    if (!agentManager) {
+      return { success: false, error: 'Agent manager not initialized' };
+    }
+    return await agentManager.restart(personality || currentPersonality);
+  });
+
+  ipcMain.handle('livekit:updatePersonality', async (_, newPersonality) => {
+    currentPersonality = newPersonality;
+    if (agentManager) {
+      return await agentManager.updatePersonality(newPersonality);
+    }
+    return { success: true };
+  });
+
+  // Android Control (ADB)
+  ipcMain.handle('adb:check', () => adbControl.checkADBInstalled());
+  ipcMain.handle('adb:connect', (_, ip, port) => adbControl.connect(ip, port));
+  ipcMain.handle('adb:disconnect', () => adbControl.disconnect());
+  ipcMain.handle('adb:getDevices', () => adbControl.getDevices());
+  ipcMain.handle('adb:tap', (_, x, y) => adbControl.tap(x, y));
+  ipcMain.handle('adb:swipe', (_, x1, y1, x2, y2, d) => adbControl.swipe(x1, y1, x2, y2, d));
+  ipcMain.handle('adb:type', (_, text) => adbControl.typeText(text));
+  ipcMain.handle('adb:key', (_, code) => adbControl.sendKeyEvent(code));
+  ipcMain.handle('adb:home', () => adbControl.pressHome());
+  ipcMain.handle('adb:back', () => adbControl.pressBack());
+  ipcMain.handle('adb:launch', (_, pkg) => adbControl.launchApp(pkg));
+  ipcMain.handle('adb:close', (_, pkg) => adbControl.closeApp(pkg));
+  ipcMain.handle('adb:screenshot', async () => {
+    // Generate temp path
+    const tmpPath = path.join(app.getPath('temp'), `adb-screen-${Date.now()}.png`);
+    const result = await adbControl.takeScreenshot(tmpPath);
+    if (result.success) {
+      // Return file:// URL for renderer
+      return { success: true, url: `file://${tmpPath.replace(/\\/g, '/')}` };
+    }
+    return result;
+  });
+  ipcMain.handle('adb:info', () => adbControl.getDeviceInfo());
+
   // App
   ipcMain.handle('app:getTheme', () => nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
   ipcMain.handle('app:openExternal', (_, url) => shell.openExternal(url));
@@ -422,8 +618,16 @@ if (!gotTheLock) {
   });
 }
 
-// Unregister shortcuts on quit
-app.on('will-quit', () => {
+// Unregister shortcuts and cleanup on quit
+app.on('will-quit', async () => {
+  // Stop AI agent
+  if (agentManager) {
+    await agentManager.stop();
+  }
+  // Cleanup LiveKit rooms
+  if (livekitService) {
+    await livekitService.cleanup();
+  }
   globalShortcut.unregisterAll();
 });
 

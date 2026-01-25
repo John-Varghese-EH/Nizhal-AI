@@ -6,10 +6,13 @@ import {
     Wifi, Camera, MessageSquare, Phone,
     Shield, ShieldOff
 } from 'lucide-react';
-import ParticleSphereVisualizer from './ParticleSphereVisualizer';
+const ParticleSphereVisualizer = React.lazy(() => import('./ParticleSphereVisualizer'));
 import ChatView from './ChatView';
 import CameraFeed from './CameraFeed';
 import SettingsView from './SettingsView';
+import AndroidMirror from './AndroidMirror';
+import { calendarManager } from '../../assistant/life-manager/Calendar';
+import { weatherService } from '../../assistant/life-manager/Weather';
 
 /**
  * FullDashboard - Full-screen Kreo 2.0 style dashboard
@@ -35,11 +38,25 @@ const FullDashboard = ({
     onSettingsOpen
 }) => {
     const [activeTab, setActiveTab] = useState('chat');
+    const [showMirror, setShowMirror] = useState(false);
     const [systemInfo, setSystemInfo] = useState({
         cpu: '0%',
         memory: '0%',
         connection: 'Offline'
     });
+    const [lifeData, setLifeData] = useState({ weather: null, events: [] });
+
+    useEffect(() => {
+        if (activeTab === 'life') {
+            loadLifeData();
+        }
+    }, [activeTab]);
+
+    const loadLifeData = async () => {
+        const weather = await weatherService.getWeather();
+        const events = await calendarManager.getUpcomingEvents();
+        setLifeData({ weather, events });
+    };
 
     useEffect(() => {
         loadSystemInfo();
@@ -63,9 +80,9 @@ const FullDashboard = ({
     };
 
     return (
-        <div className="h-full w-full flex flex-col bg-slate-950 text-white overflow-hidden">
+        <div className="h-full w-full flex flex-col bg-bg-main text-text-main overflow-hidden transition-colors duration-300">
             {/* Top Bar */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-slate-900/50">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-bg-card">
                 <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-cyan-400 animate-pulse' : 'bg-slate-500'}`} />
@@ -116,6 +133,14 @@ const FullDashboard = ({
                     </button>
 
                     <button
+                        onClick={() => setShowMirror(true)}
+                        className="p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
+                        title="Android Mirror"
+                    >
+                        <Phone size={18} className="text-slate-400" />
+                    </button>
+
+                    <button
                         onClick={onRestore}
                         className="p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
                         title="Restore to compact mode"
@@ -125,17 +150,25 @@ const FullDashboard = ({
                 </div>
             </div>
 
+            <AnimatePresence>
+                {showMirror && (
+                    <AndroidMirror onClose={() => setShowMirror(false)} />
+                )}
+            </AnimatePresence>
+
             {/* Main Content */}
             <div className="flex-1 flex overflow-hidden">
                 {/* Left Panel - Visualizer */}
                 <div className="w-1/3 min-w-[300px] flex flex-col border-r border-white/5">
                     <div className="flex-1 p-4">
-                        <ParticleSphereVisualizer
-                            isActive={isConnected && (isListening || isSpeaking)}
-                            analyserOut={analyserOut}
-                            analyserIn={analyserIn}
-                            isUserSpeaking={isUserSpeaking}
-                        />
+                        <React.Suspense fallback={<div className="h-full w-full flex items-center justify-center text-white/20">Loading 3D...</div>}>
+                            <ParticleSphereVisualizer
+                                isActive={isConnected && (isListening || isSpeaking)}
+                                analyserOut={analyserOut}
+                                analyserIn={analyserIn}
+                                isUserSpeaking={isUserSpeaking}
+                            />
+                        </React.Suspense>
                     </div>
 
                     {/* Camera Preview */}
@@ -208,7 +241,7 @@ const FullDashboard = ({
                 <div className="flex-1 flex flex-col">
                     {/* Tab Bar */}
                     <div className="flex items-center gap-1 px-4 pt-4">
-                        {['chat', 'notes', 'tasks', 'settings'].map(tab => (
+                        {['chat', 'life', 'settings'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
@@ -239,29 +272,65 @@ const FullDashboard = ({
                                     />
                                 </motion.div>
                             )}
-                            {activeTab === 'notes' && (
+                            {activeTab === 'life' && (
                                 <motion.div
-                                    key="notes"
+                                    key="life"
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
                                     exit={{ opacity: 0 }}
-                                    className="h-full p-4"
+                                    className="h-full p-6 overflow-y-auto"
                                 >
-                                    <div className="flex items-center justify-center h-full text-slate-500">
-                                        <p>Notes feature coming soon...</p>
-                                    </div>
-                                </motion.div>
-                            )}
-                            {activeTab === 'tasks' && (
-                                <motion.div
-                                    key="tasks"
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    className="h-full p-4"
-                                >
-                                    <div className="flex items-center justify-center h-full text-slate-500">
-                                        <p>Tasks feature coming soon...</p>
+                                    <h2 className="text-xl font-light mb-6 text-cyan-400">Personal Dashboard</h2>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        {/* Weather Card */}
+                                        <div className="p-6 rounded-2xl bg-white/5 border border-white/10 glass-panel">
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div>
+                                                    <h3 className="text-3xl font-bold">{lifeData.weather?.temp ?? '--'}°C</h3>
+                                                    <p className="text-slate-400 capitalize">{lifeData.weather?.description ?? 'Loading...'}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-lg font-medium">{lifeData.weather?.city ?? ''}</p>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4 mt-4 text-sm text-slate-400">
+                                                <div className="flex items-center gap-2">
+                                                    <span>💧 Humidity</span>
+                                                    <span className="text-white">{lifeData.weather?.humidity ?? 0}%</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span>💨 Wind</span>
+                                                    <span className="text-white">{lifeData.weather?.wind ?? 0} km/h</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Calendar Card */}
+                                        <div className="p-6 rounded-2xl bg-white/5 border border-white/10 glass-panel">
+                                            <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
+                                                📅 Upcoming Events
+                                            </h3>
+                                            <div className="space-y-3">
+                                                {lifeData.events.length > 0 ? (
+                                                    lifeData.events.map(event => (
+                                                        <div key={event.id} className="flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5">
+                                                            <div className={`w-1 h-8 rounded-full ${event.type === 'work' ? 'bg-cyan-400' :
+                                                                    event.type === 'personal' ? 'bg-purple-400' : 'bg-green-400'
+                                                                }`} />
+                                                            <div>
+                                                                <p className="font-medium">{event.title}</p>
+                                                                <p className="text-xs text-slate-400">
+                                                                    {new Date(event.time).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <p className="text-slate-500 text-sm">No upcoming events.</p>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                 </motion.div>
                             )}

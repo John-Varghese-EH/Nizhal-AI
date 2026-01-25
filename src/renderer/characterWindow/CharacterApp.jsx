@@ -8,15 +8,14 @@ import { getAvatarStateController, AvatarState } from '../../services/AvatarStat
 import { windowSittingService } from '../../services/WindowSitting';
 import { companionPersonality } from '../../services/CompanionPersonality';
 import { cuteErrorHandler } from '../../services/CuteErrorHandler';
+import { surpriseService } from '../../services/SurpriseService';
 import CharacterCustomizer from '../components/CharacterCustomizer';
 import JarvisHologram from '../components/avatar/JarvisHologram';
 import SpeechBubble from '../components/avatar/SpeechBubble';
 import QuickMenu from '../components/QuickMenu';
 import ParticleEffects from '../components/ParticleEffects';
-import BootSequence from './BootSequence';
 import ShareCard from '../components/ShareCard';
 import SettingsPanel from '../components/SettingsPanel';
-import MagicSetup from '../components/Onboarding/MagicSetup';
 import TicTacToe from '../components/TicTacToe';
 
 import { useTheme } from '../hooks/useTheme';
@@ -55,6 +54,12 @@ const AVAILABLE_CHARACTERS = [
  */
 const CharacterApp = () => {
     // Unified settings state
+    const [userProfile, setUserProfile] = useState({
+        name: '',
+        vibe: 50,
+        relationship: 'friend'
+    });
+
     const [settings, setSettings] = useState({
         character: 'aldina', // Default to Aldina VRM model
         scale: 1,
@@ -108,6 +113,7 @@ const CharacterApp = () => {
     const [windowSize, setWindowSize] = useState({ width: 0, height: 0 }); // Start with 0 to detect when ready
     const [windowReady, setWindowReady] = useState(false);
     const [isGameActive, setIsGameActive] = useState(false);
+    const [isScreensaver, setIsScreensaver] = useState(false);
     const [bootComplete, setBootComplete] = useState(false);
     const previousWindowSize = useRef(null);
 
@@ -168,6 +174,9 @@ const CharacterApp = () => {
                     if (globalState.vrm?.modelId) {
                         setSettings(prev => ({ ...prev, character: globalState.vrm.modelId }));
                     }
+                    if (globalState.user?.profile) {
+                        setUserProfile(globalState.user.profile);
+                    }
                 }
 
                 // Fallback to localStorage for backward compatibility
@@ -184,7 +193,7 @@ const CharacterApp = () => {
         loadSettings();
 
         // Subscribe to state changes
-        const unsubState = window.nizhal?.state?.subscribe?.(['ai', 'vrm', 'ui'], (data) => {
+        const unsubState = window.nizhal?.state?.subscribe?.(['ai', 'vrm', 'ui', 'user'], (data) => {
             if (data.path?.startsWith('ai.personalityMode')) {
                 setPersonalityMode(data.value);
             }
@@ -196,6 +205,9 @@ const CharacterApp = () => {
             }
             if (data.path?.startsWith('ui')) {
                 setUiSettings(prev => ({ ...prev, [data.path.split('.')[1]]: data.value }));
+            }
+            if (data.path?.startsWith('user.profile')) {
+                setUserProfile(data.value);
             }
         });
 
@@ -233,12 +245,22 @@ const CharacterApp = () => {
             }
         };
 
-        // Delay initial size check to ensure window is fully rendered
-        const initTimer = setTimeout(updateSize, 100);
+        // Initial check immediately
+        updateSize();
+
+        // Polling checks to ensure we catch the final window size after Electron startup/maximize
+        // This fixes the "small avatar" bug where initial size is reported incorrectly
+        const timers = [
+            setTimeout(updateSize, 100),
+            setTimeout(updateSize, 500),
+            setTimeout(updateSize, 1000),
+            setTimeout(updateSize, 2000)
+        ];
+
         window.addEventListener('resize', updateSize);
 
         return () => {
-            clearTimeout(initTimer);
+            timers.forEach(t => clearTimeout(t));
             window.removeEventListener('resize', updateSize);
         };
     }, [windowReady]);
@@ -259,15 +281,18 @@ const CharacterApp = () => {
         // Camera distance - pull back more to see full model
         const cameraZ = 3.5;
 
-        // Move model down significantly so head is visible (adjusted lower to prevent cropping)
-        const positionY = -1.0;
+        // Move model down significantly so head is visible only in screensaver mode (adjusted lower to prevent cropping)
+        const positionY = isScreensaver ? -3.2 : -1.0;
+
+        // Allow larger scale in screensaver mode
+        const maxScale = isScreensaver ? 3.0 : 1.5;
 
         return {
-            scale: Math.max(0.8, Math.min(1.5, scaleFactor)), // Smaller scale to fit full body
+            scale: Math.max(0.8, Math.min(maxScale, scaleFactor)), // Smaller scale to fit full body
             position: [0, positionY, 0], // Lower position
             cameraPosition: [0, 0.5, cameraZ] // Camera at mid-height, further back
         };
-    }, [windowSize]);
+    }, [windowSize, isScreensaver]);
 
     // Save settings on change and sync personality level
     useEffect(() => {
@@ -337,15 +362,23 @@ const CharacterApp = () => {
         }, 300000); // Check every 5 mins
 
         // Handle sleep/wake events
-        window.nizhal?.on?.('system:idle', () => {
-            console.log('Received system idle');
-            getAvatarStateController().setState(AvatarState.SLEEPING);
+        window.nizhal?.on?.('system:idle', (data) => {
+            console.log('Received system idle', data);
+
+            if (data?.isFullscreen) {
+                setIsScreensaver(true);
+                getAvatarStateController().setState(AvatarState.DANCING); // Or just idle? Maybe floating?
+            } else {
+                getAvatarStateController().setState(AvatarState.SLEEPING);
+            }
+
             setSpeechMessage('Zzz...');
             setIsSpeechVisible(true);
         });
 
         window.nizhal?.on?.('system:resume', () => {
             console.log('Received system resume');
+            setIsScreensaver(false);
             getAvatarStateController().setState(AvatarState.IDLE);
             setSpeechMessage('Huh? I\'m awake!');
             setIsSpeechVisible(true);
@@ -537,8 +570,51 @@ const CharacterApp = () => {
 
     // Avatar click
     const handleAvatarClick = useCallback(() => {
-        window.nizhal?.invoke?.('window:showChat');
-    }, []);
+        if (isScreensaver) {
+            // Wake up if clicked in screensaver
+            window.nizhal?.invoke?.('window:showChat'); // Or just wake up
+            // Main process should handle the click and restore too?
+            // Actually the click might not propagate if window is clickthrough but we enable interaction?
+            // For now, assume it works.
+        } else {
+            window.nizhal?.invoke?.('window:showChat');
+        }
+    }, [isScreensaver]);
+
+    // Initialize Surprise Service
+    useEffect(() => {
+        // Handle surprise events
+        const cleanup = surpriseService.onSurprise((type, data) => {
+            console.log('[CharacterApp] Surprise event:', type, data);
+
+            switch (type) {
+                case 'emote':
+                    expressionRef.current?.onEvent(data);
+                    particleRef.current?.burst(data === 'love' ? 'heart' : 'spark', window.innerWidth / 2, window.innerHeight / 2, 10);
+                    break;
+                case 'message':
+                    setSpeechMessage(data);
+                    setIsSpeechVisible(true);
+                    break;
+                case 'spin':
+                    getAvatarStateController().setState(AvatarState.DANCING);
+                    setTimeout(() => getAvatarStateController().setState(AvatarState.IDLE), 2000);
+                    break;
+            }
+        });
+
+        if (isScreensaver) {
+            surpriseService.start(true); // Frequent surprises in screensaver
+        } else {
+            // Start infrequent background surprises
+            surpriseService.start(false);
+        }
+
+        return () => {
+            surpriseService.stop();
+            cleanup();
+        };
+    }, [isScreensaver]);
 
     // Drag handlers
     const handleDragStart = useCallback((e) => {
@@ -671,14 +747,26 @@ const CharacterApp = () => {
             default:
                 console.log('[CharacterApp] Unknown quick action:', action);
         }
-    }, [toggleDance]);
+    }, [toggleDance]); // Close handleQuickAction
 
-    // Dance animation
+    const handleProfileChange = useCallback(async (newProfile) => {
+        setUserProfile(newProfile);
+        await window.nizhal?.state?.set?.('user.profile', newProfile);
+        console.log('[CharacterApp] Profile updated:', newProfile);
+    }, []);
+
+    // Dance animation (or screensaver float)
+    const floatAnimation = isScreensaver ? {
+        y: [-20, 20, -20],
+        x: [-50, 50, -50],
+        rotate: [-5, 5, -5]
+    } : {};
+
     const danceAnimation = isDancing ? {
         y: [0, -10 * danceIntensity, 0],
         rotate: [-3 * danceIntensity, 3 * danceIntensity, -3 * danceIntensity],
         scale: [1, 1 + 0.05 * danceIntensity, 1]
-    } : {};
+    } : floatAnimation; // Use float if screensaver and not dancing
 
     // Prevent rendering until window size is detected to avoid "small top-left" glitch
     if (!windowReady) return null;
@@ -693,7 +781,6 @@ const CharacterApp = () => {
 
     return (
         <>
-            <BootSequence onComplete={() => setBootComplete(true)} />
             <ParticleEffects ref={particleRef} />
 
             {/* File Drop Overlay */}
@@ -710,20 +797,9 @@ const CharacterApp = () => {
                 </div>
             )}
 
-            {/* Onboarding Overlay */}
-            {needsOnboarding && (
-                <MagicSetup onComplete={(data) => {
-                    setNeedsOnboarding(false);
-                    // Optionally trigger a welcome speech here
-                    if (window.nizhal?.invoke) {
-                        window.nizhal.invoke('avatar:speak', `Hello ${data.name}! I'm so happy to meet you.`);
-                    }
-                }} />
-            )}
-
             <div
                 className={`w-screen h-screen overflow-hidden select-none transition-opacity duration-300 ${isClickThrough && !isGameActive ? 'pointer-events-none' : 'pointer-events-auto'}`}
-                style={{ opacity: (vrmLoaded && bootComplete) ? (settings.opacity ?? 1) : 0 }}
+                style={{ opacity: (vrmLoaded) ? (settings.opacity ?? 1) : 0 }}
             >
                 <AnimatePresence>
                     {isGameActive && (
@@ -751,7 +827,11 @@ const CharacterApp = () => {
                     className="relative interactive cursor-pointer w-full h-full flex items-center justify-center"
                     initial={{ scale: 0, opacity: 0 }}
                     animate={{ scale: settings.scale, opacity: 1, ...danceAnimation }}
-                    transition={isDancing ? { repeat: Infinity, duration: 0.4, ease: 'easeInOut' } : { type: 'spring', damping: 15 }}
+                    transition={
+                        isDancing ? { repeat: Infinity, duration: 0.4, ease: 'easeInOut' } :
+                            isScreensaver ? { repeat: Infinity, duration: 10, ease: 'easeInOut' } : // Slow float
+                                { type: 'spring', damping: 15 }
+                    }
                     onClick={handleAvatarClick}
                     onContextMenu={handleContextMenu}
                     onMouseDown={handleDragStart}
@@ -890,6 +970,8 @@ const CharacterApp = () => {
                         setSettings(prev => ({ ...prev, ...newSettings }));
                         setUiSettings(prev => ({ ...prev, ...newSettings }));
                     }}
+                    userProfile={userProfile}
+                    onProfileChange={handleProfileChange}
                     availableCharacters={AVAILABLE_CHARACTERS}
                     onShare={() => {
                         setSettingsOpen(false);
@@ -901,7 +983,7 @@ const CharacterApp = () => {
                 <ShareCard
                     isOpen={shareOpen}
                     onClose={() => setShareOpen(false)}
-                    userName={"User"} // In future, get from Memory
+                    userName={userProfile.name || "User"} // In future, get from Memory
                     stats={{ level: 5, messages: 124, days: 3, lastMemory: "Helping with code" }} // Mock for now, hook up to Memory later
                     currentCharacter={currentCharacter}
                     personalityMode={personalityMode}

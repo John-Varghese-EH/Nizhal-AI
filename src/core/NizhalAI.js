@@ -14,6 +14,7 @@ import EmotionEngine from './EmotionEngine.js';
 import PersonalitySystem from './PersonalitySystem.js';
 import ContextManager from './ContextManager.js';
 import VoiceService from '../services/VoiceService.js';
+import { VoiceManager } from '../services/VoiceManager.js';
 import { relationshipMemory } from './RelationshipMemory.js';
 import { proactiveService } from './ProactiveService.js';
 import { usageAnalytics } from '../services/UsageAnalytics.js';
@@ -70,7 +71,10 @@ export class NizhalAI {
         const store = appStateService?.store;
         this.contextManager = new ContextManager(store);
 
-        this.voiceService = new VoiceService(process.env.ELEVENLABS_API_KEY || '');
+        // Voice System - Use unified VoiceManager (prioritizes LiveKit)
+        const fallbackVoiceService = new VoiceService(process.env.ELEVENLABS_API_KEY || '');
+        this.voiceManager = new VoiceManager();
+        this.voiceManager.initialize(fallbackVoiceService);
 
         // Phase 2: Intelligence
         this.memory = relationshipMemory;
@@ -225,7 +229,8 @@ export class NizhalAI {
         const profile = this.personalitySystem.getProfile(personalityMode);
 
         try {
-            await this.voiceService.speak(text, profile, emotionData);
+            // Use VoiceManager (prioritizes LiveKit, falls back to VoiceService)
+            await this.voiceManager.speak(text, { profile, emotionData });
         } catch (e) {
             console.warn('[NizhalAI] Voice error:', e);
         }
@@ -243,8 +248,8 @@ export class NizhalAI {
         const currentMode = this.appStateService?.getPersonalityMode?.() || 'gf';
         const profile = this.personalitySystem.getProfile(currentMode);
 
-        if (this.voiceService) {
-            await this.voiceService.speak(data.message, profile, 'happy');
+        if (this.voiceManager) {
+            await this.voiceManager.speak(data.message, { profile, emotionData: 'happy' });
         }
 
         // Also emit event for UI to show bubble
