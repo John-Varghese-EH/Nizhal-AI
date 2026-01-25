@@ -230,10 +230,11 @@ class AppStateService {
      * @param {BrowserWindow} window 
      */
     registerWindow(window) {
-        if (window && window.webContents) {
-            this.windows.add(window.webContents);
+        if (window && window.webContents && !window.isDestroyed()) {
+            const webContents = window.webContents;
+            this.windows.add(webContents);
             window.on('closed', () => {
-                this.windows.delete(window.webContents);
+                this.windows.delete(webContents);
             });
         }
     }

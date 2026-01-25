@@ -2,11 +2,7 @@ const { exec } = require('child_process');
 
 console.clear();
 console.log('\x1b[32m%s\x1b[0m', `
-  _  __    ___      __    ___     ___   _  _ 
- | |/ /   /   \\     \\ \\  / /     /   \\ | || |
- | ' <    | - |      \\ \\/ /      | - | | __ |
- |_|\\_\\   |_|_|       \\__/       |_|_| |_||_|
-                                             
+  Hello World!                                           
   >>> NIZHAL AI HACKATHON PROTOCOL INITIATED <<<
 `);
 

@@ -31,6 +31,22 @@ const AppLayout = ({
     onMirrorToggle,
     windowMode = 'compact' // 'full' | 'compact'
 }) => {
+    // State for user preferences
+    const [objectDetectionEnabled, setObjectDetectionEnabled] = useState(false);
+
+    // Load object detection preference
+    useEffect(() => {
+        const loadPreferences = async () => {
+            try {
+                const prefs = await window.nizhal?.memory?.getUserPreferences();
+                setObjectDetectionEnabled(prefs?.objectDetectionEnabled || false);
+            } catch (error) {
+                console.error('Failed to load preferences:', error);
+            }
+        };
+        loadPreferences();
+    }, []);
+
     // Navigation Items
     const navItems = [
         { id: 'chat', label: 'Chat', icon: MessageSquare },
@@ -233,6 +249,7 @@ const AppLayout = ({
                             enabled={true}
                             onToggle={onCameraToggle}
                             showControls={false}
+                            enableObjectDetection={objectDetectionEnabled}
                             className="w-full h-full"
                         />
                         {/* Overlay Close Button */}

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Attribution from './Attribution';
 
-const SettingsView = ({ onBack, onPersonaChange, privacyMode, onPrivacyToggle }) => {
+const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacyToggle, isModal = false, userProfile, onProfileChange }) => {
     const [preferences, setPreferences] = useState({});
     const [personas, setPersonas] = useState([]);
     const [activePersonaId, setActivePersonaId] = useState('jarvis');
@@ -14,9 +14,14 @@ const SettingsView = ({ onBack, onPersonaChange, privacyMode, onPrivacyToggle })
     const [activeTab, setActiveTab] = useState('general');
     const [availableModels, setAvailableModels] = useState([]);
 
+
+
     useEffect(() => {
         loadSettings();
     }, []);
+
+    // Load Life Data when tab is active
+
 
     const loadSettings = async () => {
         try {
@@ -195,13 +200,23 @@ const SettingsView = ({ onBack, onPersonaChange, privacyMode, onPrivacyToggle })
 
     return (
         <div className="h-full flex flex-col overflow-hidden">
-            <div className="p-4 border-b border-white/5">
-                <h2 className="text-lg font-semibold gradient-text">Settings</h2>
-                <p className="text-xs text-white/50 mt-1">Customize your Nizhal AI experience</p>
+            <div className="p-4 border-b border-white/5 flex items-center justify-between">
+                <div>
+                    <h2 className="text-lg font-semibold gradient-text">Settings</h2>
+                    <p className="text-xs text-white/50 mt-1">Customize your Nizhal AI experience</p>
+                </div>
+                {isModal && onClose && (
+                    <button
+                        onClick={onClose}
+                        className="p-2 hover:bg-white/10 rounded-full transition-colors text-white/60 hover:text-white"
+                    >
+                        ✕
+                    </button>
+                )}
             </div>
 
             {/* Tab Navigation */}
-            <div className="px-4 py-2 flex gap-2 border-b border-white/5 overflow-x-auto">
+            <div className="px-4 py-2 flex gap-2 border-b border-white/5 overflow-x-auto scrollbar-thin scrollbar-thumb-white/10">
                 <TabButton id="general" label="General" active={activeTab === 'general'} />
                 <TabButton id="character" label="Character" active={activeTab === 'character'} />
                 <TabButton id="ai" label="AI Providers" active={activeTab === 'ai'} />
@@ -278,6 +293,74 @@ const SettingsView = ({ onBack, onPersonaChange, privacyMode, onPrivacyToggle })
                                             enabled={preferences.voiceEnabled}
                                             onChange={(value) => handlePreferenceChange('voiceEnabled', value)}
                                         />
+                                    </SettingRow>
+
+                                    <SettingRow label="Object Detection" description="Detect objects in camera feed with bounding boxes">
+                                        <Toggle
+                                            enabled={preferences.objectDetectionEnabled}
+                                            onChange={(value) => handlePreferenceChange('objectDetectionEnabled', value)}
+                                        />
+                                    </SettingRow>
+
+                                    <div className="py-3">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <div>
+                                                <div className="text-sm font-medium text-white">Weather Location</div>
+                                                <div className="text-xs text-white/40">Set city for local forecasts</div>
+                                            </div>
+                                            <div className="text-xs text-cyan-400 font-mono">
+                                                {preferences.weatherLocation?.name || 'Kochi, IN'}
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                placeholder="Enter city name..."
+                                                className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-indigo-500/50 outline-none"
+                                                onKeyDown={async (e) => {
+                                                    if (e.key === 'Enter') {
+                                                        const city = e.target.value;
+                                                        if (!city) return;
+
+                                                        // Import dynamically or assume weatherService is available globally/imported
+                                                        // Since we can't easily import here without top-level changes, we'll use a hack or assume the service is exposed
+                                                        // Better: We'll fetch directly here or add a helper
+                                                        try {
+                                                            const { weatherService } = await import('../../assistant/life-manager/Weather');
+                                                            const location = await weatherService.resolveLocation(city);
+                                                            if (location) {
+                                                                handlePreferenceChange('weatherLocation', location);
+                                                                e.target.value = ''; // Clear input on success
+                                                            } else {
+                                                                alert('City not found!');
+                                                            }
+                                                        } catch (err) {
+                                                            console.error('Failed to resolve location', err);
+                                                        }
+                                                    }
+                                                }}
+                                            />
+                                            <button className="px-3 py-2 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 rounded-lg text-sm">
+                                                Set
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <SettingRow label="Temperature Unit" description="Celsius or Fahrenheit">
+                                        <div className="flex bg-white/10 rounded-lg p-1">
+                                            <button
+                                                onClick={() => handlePreferenceChange('tempUnit', 'C')}
+                                                className={`px-3 py-1 rounded-md text-xs transition-colors ${!preferences.tempUnit || preferences.tempUnit === 'C' ? 'bg-indigo-600 text-white' : 'text-white/50 hover:text-white'}`}
+                                            >
+                                                °C
+                                            </button>
+                                            <button
+                                                onClick={() => handlePreferenceChange('tempUnit', 'F')}
+                                                className={`px-3 py-1 rounded-md text-xs transition-colors ${preferences.tempUnit === 'F' ? 'bg-indigo-600 text-white' : 'text-white/50 hover:text-white'}`}
+                                            >
+                                                °F
+                                            </button>
+                                        </div>
                                     </SettingRow>
 
                                     <SettingRow label="Always on Top" description="Keep window above others">

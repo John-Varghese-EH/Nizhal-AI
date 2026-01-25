@@ -1,11 +1,13 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Camera, CameraOff, RefreshCw, AlertCircle } from 'lucide-react';
+import { Camera, CameraOff, RefreshCw, AlertCircle, Box } from 'lucide-react';
 import cameraService from '../../services/CameraService';
+import { objectDetectionService } from '../../services/ObjectDetectionService';
 
 /**
  * CameraFeed - Camera preview component with controls
  * Integrates with CameraService for webcam access
+ * Optionally includes COCO-SSD object detection with bounding boxes
  */
 const CameraFeed = ({
     enabled = false,
@@ -13,13 +15,17 @@ const CameraFeed = ({
     onFrame,
     privacyMode = false,
     showControls = true,
+    enableObjectDetection = false,
     className = ''
 }) => {
     const videoRef = useRef(null);
+    const canvasRef = useRef(null);
     const [isActive, setIsActive] = useState(false);
     const [error, setError] = useState(null);
     const [cameras, setCameras] = useState([]);
     const [currentCamera, setCurrentCamera] = useState(null);
+    const [detections, setDetections] = useState([]);
+    const [modelLoaded, setModelLoaded] = useState(false);
 
     const isMounted = useRef(false);
     const mountingRef = useRef(false);
@@ -38,6 +44,83 @@ const CameraFeed = ({
             stopCamera();
         };
     }, [enabled, privacyMode]);
+
+    // Handle object detection toggle
+    useEffect(() => {
+        if (enableObjectDetection && isActive && videoRef.current) {
+            startObjectDetection();
+        } else {
+            stopObjectDetection();
+        }
+
+        return () => {
+            stopObjectDetection();
+        };
+    }, [enableObjectDetection, isActive]);
+
+    // Draw bounding boxes on canvas
+    useEffect(() => {
+        if (!canvasRef.current || !videoRef.current) return;
+
+        const canvas = canvasRef.current;
+        const video = videoRef.current;
+        const ctx = canvas.getContext('2d');
+
+        // Match canvas size to video
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        // Clear previous drawings
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (detections.length === 0) return;
+
+        // Draw each detection
+        detections.forEach(detection => {
+            const [x, y, width, height] = detection.bbox;
+
+            // Draw bounding box
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(x, y, width, height);
+
+            // Draw label background
+            ctx.fillStyle = '#00ffff';
+            const label = `${detection.class} ${detection.confidence}%`;
+            ctx.font = 'bold 16px monospace';
+            const textWidth = ctx.measureText(label).width;
+            ctx.fillRect(x, y - 25, textWidth + 10, 25);
+
+            // Draw label text
+            ctx.fillStyle = '#000000';
+            ctx.fillText(label, x + 5, y - 7);
+        });
+    }, [detections]);
+
+    const startObjectDetection = async () => {
+        if (!videoRef.current) return;
+
+        console.log('[CameraFeed] Starting object detection...');
+        const loaded = await objectDetectionService.loadModel();
+
+        if (loaded && isMounted.current) {
+            setModelLoaded(true);
+            objectDetectionService.startDetection(
+                videoRef.current,
+                (detectionResults) => {
+                    if (isMounted.current) {
+                        setDetections(detectionResults);
+                    }
+                },
+                500 // Detect every 500ms
+            );
+        }
+    };
+
+    const stopObjectDetection = () => {
+        objectDetectionService.stopDetection();
+        setDetections([]);
+    };
 
     const startCamera = async () => {
         setError(null);
@@ -88,6 +171,7 @@ const CameraFeed = ({
 
     const stopCamera = () => {
         cameraService.stopCamera();
+        stopObjectDetection();
         if (isMounted.current) {
             setIsActive(false);
         }
@@ -154,6 +238,14 @@ const CameraFeed = ({
                 className={`w-full h-full object-cover ${enabled ? 'block' : 'hidden'}`}
             />
 
+            {/* Canvas overlay for bounding boxes */}
+            {enabled && enableObjectDetection && (
+                <canvas
+                    ref={canvasRef}
+                    className="absolute top-0 left-0 w-full h-full pointer-events-none"
+                />
+            )}
+
             {/* Placeholder when not active */}
             {!enabled && (
                 <div className="aspect-video flex flex-col items-center justify-center text-slate-500 p-4">
@@ -176,6 +268,16 @@ const CameraFeed = ({
                 <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 bg-red-500/80 rounded-full">
                     <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
                     <span className="text-[10px] font-mono text-white">LIVE</span>
+                </div>
+            )}
+
+            {/* Object detection indicator */}
+            {enabled && enableObjectDetection && (
+                <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-1 bg-cyan-500/80 rounded-full">
+                    <Box size={12} className="text-white" />
+                    <span className="text-[10px] font-mono text-white">
+                        {modelLoaded ? `${detections.length} objects` : 'Loading...'}
+                    </span>
                 </div>
             )}
 

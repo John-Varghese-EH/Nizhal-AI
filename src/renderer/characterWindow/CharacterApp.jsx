@@ -15,7 +15,7 @@ import SpeechBubble from '../components/avatar/SpeechBubble';
 import QuickMenu from '../components/QuickMenu';
 import ParticleEffects from '../components/ParticleEffects';
 import ShareCard from '../components/ShareCard';
-import SettingsPanel from '../components/SettingsPanel';
+import SettingsView from '../components/SettingsView';
 import TicTacToe from '../components/TicTacToe';
 
 import { useTheme } from '../hooks/useTheme';
@@ -140,6 +140,53 @@ const CharacterApp = () => {
 
     const { isDragging: isFileDragging } = useFileDrop(handleFileDrop);
 
+    // Toggle Settings with Fullscreen
+    const handleSettingsToggle = useCallback(async (open) => {
+        if (open) {
+            if (settingsOpen) return;
+
+            // 1. Close context menu immediately for responsiveness
+            setContextMenuOpen(false);
+
+            // 2. Open settings modal
+            setSettingsOpen(true);
+
+            // 3. Resize window (async, non-blocking for UI)
+            try {
+                // Save current size and position
+                const currentPos = await window.nizhal?.character?.getPosition?.() || { x: 0, y: 0 };
+                previousWindowSize.current = { ...windowSize, x: currentPos.x, y: currentPos.y };
+
+                const { width, height } = window.screen;
+                await window.nizhal?.character?.setSize?.(width, height);
+                await window.nizhal?.character?.setPosition?.(0, 0);
+            } catch (err) {
+                console.error("Failed to resize for settings:", err);
+            }
+        } else {
+            setSettingsOpen(false);
+
+            // Restore size
+            try {
+                if (previousWindowSize.current) {
+                    await window.nizhal?.character?.setSize?.(
+                        previousWindowSize.current.width,
+                        previousWindowSize.current.height
+                    );
+                    // Restore position if we have it
+                    if (previousWindowSize.current.x !== undefined) {
+                        await window.nizhal?.character?.setPosition?.(
+                            previousWindowSize.current.x,
+                            previousWindowSize.current.y
+                        );
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to restore window size:", err);
+            }
+        }
+    }, [windowSize, settingsOpen]);
+
     // Get current character
     const currentCharacter = useMemo(() =>
         AVAILABLE_CHARACTERS.find(c => c.id === settings.character) || AVAILABLE_CHARACTERS[0],
@@ -224,10 +271,19 @@ const CharacterApp = () => {
             setSettings(prev => ({ ...prev, character: modelId }));
         });
 
+        // Listen for local vision events (faster than IPC)
+        const handleLocalEmotion = (e) => {
+            const emotion = e.detail;
+            setCurrentEmotion(emotion);
+            expressionRef.current?.onEvent(emotion);
+        };
+        window.addEventListener('nizhal-emotion', handleLocalEmotion);
+
         return () => {
             unsubState?.();
             unsubEmotion?.();
             unsubVRM?.();
+            window.removeEventListener('nizhal-emotion', handleLocalEmotion);
         };
     }, []);
 
@@ -249,12 +305,13 @@ const CharacterApp = () => {
         updateSize();
 
         // Polling checks to ensure we catch the final window size after Electron startup/maximize
-        // This fixes the "small avatar" bug where initial size is reported incorrectly
         const timers = [
             setTimeout(updateSize, 100),
             setTimeout(updateSize, 500),
             setTimeout(updateSize, 1000),
-            setTimeout(updateSize, 2000)
+            setTimeout(updateSize, 2000),
+            // Force a resize event after a slight delay to ensure canvas catches up
+            setTimeout(() => window.dispatchEvent(new Event('resize')), 1500)
         ];
 
         window.addEventListener('resize', updateSize);
@@ -854,8 +911,15 @@ const CharacterApp = () => {
                             preserveDrawingBuffer: true,
                             powerPreference: 'high-performance'
                         }}
-                        className="w-full h-full"
-                        style={{ pointerEvents: 'none' }}
+                        className="block"
+                        style={{
+                            width: windowSize.width,
+                            height: windowSize.height,
+                            pointerEvents: 'none',
+                            position: 'absolute',
+                            top: 0,
+                            left: 0
+                        }}
                     >
                         {/* Enhanced lighting for better VRM visibility */}
                         <ambientLight intensity={1.2} />
@@ -952,32 +1016,35 @@ const CharacterApp = () => {
                     onPersonalityChange={handlePersonalityChange}
                     onEmotionTrigger={handleEmotionTrigger}
                     onQuickAction={handleQuickAction}
-                    onSettingsOpen={() => {
-                        setContextMenuOpen(false);
-                        setSettingsOpen(true);
-                    }}
+                    onSettingsOpen={() => handleSettingsToggle(true)}
                     currentPersonality={personalityMode}
                     currentEmotion={currentEmotion}
                     settings={uiSettings}
                 />
 
                 {/* Unified Settings Panel */}
-                <SettingsPanel
-                    isOpen={settingsOpen}
-                    onClose={() => setSettingsOpen(false)}
-                    settings={{ ...settings, ...uiSettings, personalityMode }}
-                    onSettingsChange={(newSettings) => {
-                        setSettings(prev => ({ ...prev, ...newSettings }));
-                        setUiSettings(prev => ({ ...prev, ...newSettings }));
-                    }}
-                    userProfile={userProfile}
-                    onProfileChange={handleProfileChange}
-                    availableCharacters={AVAILABLE_CHARACTERS}
-                    onShare={() => {
-                        setSettingsOpen(false);
-                        setShareOpen(true);
-                    }}
-                />
+                <AnimatePresence>
+                    {settingsOpen && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => handleSettingsToggle(false)}>
+                            <div
+                                className="w-[800px] h-[600px] bg-black/60 backdrop-blur-2xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl relative flex flex-col"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <SettingsView
+                                    onClose={() => handleSettingsToggle(false)}
+                                    userProfile={userProfile}
+                                    onProfileChange={handleProfileChange}
+                                    isModal={true}
+                                    onPersonaChange={(persona) => {
+                                        setPersonalityMode(persona.id);
+                                        // Also sync settings locally
+                                        setSettings(prev => ({ ...prev, character: persona.id }));
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    )}
+                </AnimatePresence>
 
                 {/* Viral Share Card */}
                 <ShareCard

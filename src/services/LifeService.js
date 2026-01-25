@@ -69,6 +69,24 @@ export class LifeService {
         return this.routine;
     }
 
+    async getMorningBriefing() {
+        const quotes = [
+            "The best way to predict the future is to create it.",
+            "Do what you can, with what you have, where you are.",
+            "It always seems impossible until it's done.",
+            "Keep your face always toward the sunshine—and shadows will fall behind you."
+        ];
+        const quote = quotes[Math.floor(Math.random() * quotes.length)];
+
+        // In a real app, fetch real weather/calendar
+        return {
+            greeting: "Good morning! ☀️",
+            weather: "It's currently 72°F and sunny.",
+            agenda: "You have 3 tasks focusing on React and Python today.",
+            quote: `"${quote}"`
+        };
+    }
+
     async updateRoutine(newRoutine) {
         this.routine = { ...this.routine, ...newRoutine };
         return this.routine;

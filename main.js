@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { MultiWindowManager } from './src/electron/MultiWindowManager.js';
+import { systemStatsService } from './src/electron/SystemStatsService.js';
 import { createSystemBridge } from './src/electron/bridge.js';
 import { PersonalityCore } from './src/core/PersonalityCore.js';
 import { PersonaManager } from './src/core/PersonaManager.js';
@@ -300,6 +301,15 @@ function setupIPC() {
     return { width, height };
   });
 
+  ipcMain.handle('character:setPosition', (_, x, y) => {
+    windowManager?.setCharacterPosition(x, y);
+    return { x, y };
+  });
+
+  ipcMain.handle('character:getPosition', () => {
+    return windowManager?.getCharacterPosition() || { x: 0, y: 0, width: 0, height: 0 };
+  });
+
   // Window detection control
   ipcMain.handle('window:toggleDetection', (_, enable) => {
     if (enable) {
@@ -396,12 +406,23 @@ function setupIPC() {
   });
   ipcMain.handle('ai:setProvider', (_, provider, config) => aiService?.setProvider(provider, config));
   ipcMain.handle('ai:getProviders', () => aiService?.getAvailableProviders());
-  ipcMain.handle('ai:getProviderStatus', () => aiService?.getProviderStatus());
+  ipcMain.handle('ai:getProviderStatus', () => {
+    if (aiService && typeof aiService.getProviderStatus === 'function') {
+      return aiService.getProviderStatus();
+    }
+    console.error('[Main] ❌ Critical: aiService.getProviderStatus is missing. AI Service State:', aiService ? Object.keys(aiService) : 'null');
+    return {
+      currentProvider: 'none',
+      ollamaAvailable: false,
+      fallbackEnabled: false
+    };
+  });
   ipcMain.handle('ai:checkLocalAI', () => aiService?.checkOllamaAvailability());
   ipcMain.handle('ai:setProviderOrder', (_, order) => aiService?.setProviderOrder(order));
   ipcMain.handle('ai:setFallbackEnabled', (_, enabled) => aiService?.setFallbackEnabled(enabled));
   ipcMain.handle('ai:getModels', () => aiService?.getAvailableModels());
   ipcMain.handle('ai:setModel', (_, providerId, modelId) => aiService?.setModel(providerId, modelId));
+  ipcMain.handle('system:getStats', () => systemStatsService.getStats());
 
   // Voice
   ipcMain.handle('voice:speak', async (_, text, options) => {

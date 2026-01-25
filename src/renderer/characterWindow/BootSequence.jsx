@@ -89,7 +89,7 @@ const BootSequence = ({ onComplete, serviceReady }) => {
                             NIZHAL AI
                         </h1>
                         <p className="text-white/60 text-sm tracking-[0.2em] uppercase drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
-                            Antigravity Engine
+                            Nizhal Engine
                         </p>
                     </motion.div>
 

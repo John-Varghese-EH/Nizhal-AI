@@ -19,8 +19,8 @@ export class VoiceManager {
     async initialize(fallbackVoiceService) {
         this.fallbackVoiceService = fallbackVoiceService;
 
-        // Check if LiveKit is configured
-        if (window.nizhal?.livekit) {
+        // Check if LiveKit is configured (Renderer only)
+        if (typeof window !== 'undefined' && window.nizhal?.livekit) {
             try {
                 const status = await window.nizhal.livekit.getStatus();
                 this.livekitAvailable = status.configured;

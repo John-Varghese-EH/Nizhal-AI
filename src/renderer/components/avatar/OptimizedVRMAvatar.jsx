@@ -58,6 +58,11 @@ const OptimizedVRMModel = ({
     const idleGestureTimerRef = useRef(0);
     const lastClickTimeRef = useRef(0);
 
+    // Head pat detection logic
+    const moveHistoryRef = useRef([]);
+    const lastMoveTimeRef = useRef(0);
+    const isRubbingRef = useRef(false);
+
     // Load VRM with lazy deps
     useEffect(() => {
         let mounted = true;
@@ -294,6 +299,40 @@ const OptimizedVRMModel = ({
         animEngineRef.current?.handleInteraction(InteractionType.HOVER);
     }, []);
 
+    const handlePointerMove = useCallback((e) => {
+        // Detect "rubbing" or "petting" motion (back and forth)
+        const now = Date.now();
+        if (now - lastMoveTimeRef.current > 100) {
+            lastMoveTimeRef.current = now;
+
+            // Approximate head area (top 20% of the bounding box)
+            // e.point is the 3D intersection point
+            if (e.point && e.point.y > 1.2) { // Rough height check for head
+                moveHistoryRef.current.push(e.point.x);
+                if (moveHistoryRef.current.length > 5) moveHistoryRef.current.shift();
+
+                // Check for direction changes (zig-zag x-movement)
+                let directionChanges = 0;
+                for (let i = 2; i < moveHistoryRef.current.length; i++) {
+                    const prevDelta = moveHistoryRef.current[i - 1] - moveHistoryRef.current[i - 2];
+                    const currDelta = moveHistoryRef.current[i] - moveHistoryRef.current[i - 1];
+                    if (Math.sign(prevDelta) !== Math.sign(currDelta)) {
+                        directionChanges++;
+                    }
+                }
+
+                if (directionChanges >= 2 && !isRubbingRef.current) {
+                    isRubbingRef.current = true;
+                    console.log('[OptimizedVRMModel] Head Pat Detected! ❤️');
+                    mouseServiceRef.current?.triggerEvent('headPat'); // Notify service
+
+                    // Reset after delay
+                    setTimeout(() => { isRubbingRef.current = false; }, 1000);
+                }
+            }
+        }
+    }, []);
+
 
     if (loading) {
         return (
@@ -312,6 +351,7 @@ const OptimizedVRMModel = ({
             position={position}
             onClick={handleClick}
             onPointerOver={handlePointerOver}
+            onPointerMove={handlePointerMove}
         />
     );
 };

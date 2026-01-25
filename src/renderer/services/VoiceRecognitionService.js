@@ -13,7 +13,7 @@ export class VoiceRecognitionService {
         this.wakeWords = ['hey nizhal', 'hello nizhal', 'ok nizhal', 'nizhal'];
         this.personalityWakeWords = {
             gf: ['hey babe', 'hey love', 'sweetheart', 'baby'],
-            bf: ['yo king', 'hey bro', 'dude', 'hey man'],
+            bf: ['yo king', 'hey bro', 'dude', 'hey man', 'baby'],
             jarvis: ['hey jarvis', 'jarvis', 'computer', 'assistant']
         };
         this.activePersonality = 'gf';

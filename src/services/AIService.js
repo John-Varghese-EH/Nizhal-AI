@@ -157,7 +157,56 @@ export class AIService {
         }
     }
 
-    // ... (loadSavedConfig skipped for brevity, standard logic) ...
+    async loadSavedConfig() {
+        try {
+            // Try to load from global state
+            console.log('[AIService] Loading config...');
+            this.provider = 'auto';
+        } catch (error) {
+            console.warn('[AIService] Failed to load config, using defaults:', error);
+        }
+    }
+
+    /**
+     * Main chat interface called by NizhalAI
+     * @param {string} userMessage 
+     */
+    async chat(userMessage) {
+        try {
+            // 1. Ensure provider selected
+            if (!this.provider || this.provider === 'none') {
+                this.selectBestProvider();
+            }
+
+            if (this.provider === 'none') {
+                return { success: false, error: 'No AI provider available' };
+            }
+
+            // 2. Build Context
+            const systemPrompt = this.personaManager.buildSystemPrompt();
+
+            // 3. Chat with specific provider
+            // Use recent context for memory optimization
+            const recentContext = this.conversationContext.slice(-this.maxContextMessages);
+            const responseText = await this.chatWithProvider(this.provider, systemPrompt, recentContext, userMessage);
+
+            // 4. Update Context
+            this.conversationContext.push({ role: 'user', content: userMessage });
+            this.conversationContext.push({ role: 'assistant', content: responseText });
+
+            // Limit context size
+            if (this.conversationContext.length > this.maxContextMessages * 2) {
+                this.conversationContext = this.conversationContext.slice(-this.maxContextMessages * 2);
+            }
+
+            return { success: true, response: responseText };
+        } catch (error) {
+            console.error('[AIService] Chat failed:', error);
+
+            // Simple fallback logic could go here if needed
+            return { success: false, error: error.message };
+        }
+    }
 
     async chatWithProvider(providerId, systemPrompt, context, userMessage) {
         switch (providerId) {
@@ -364,6 +413,51 @@ export class AIService {
 
     clearContext() {
         this.conversationContext = [];
+    }
+
+    getAvailableProviders() {
+        return Object.entries(this.providerConfigs)
+            .filter(([id]) => id !== 'webllm') // Filter out browser-only providers
+            .map(([id, config]) => {
+                let available = false;
+                let configured = false;
+
+                if (id === 'ollama') {
+                    available = this.ollamaAvailable;
+                    configured = true;
+                } else {
+                    configured = !!config.apiKey;
+                    available = configured; // Assume available if configured for cloud providers
+                }
+
+                return {
+                    id,
+                    name: id.charAt(0).toUpperCase() + id.slice(1),
+                    description: this._getProviderDescription(id),
+                    configured,
+                    available,
+                    models: [] // Models are fetched separately
+                };
+            });
+    }
+
+    _getProviderDescription(id) {
+        switch (id) {
+            case 'ollama': return 'Run local LLMs freely (no API key required)';
+            case 'gemini': return 'Google\'s multimodal AI models';
+            case 'openai': return 'Advanced reasoning models (GPT-4)';
+            case 'anthropic': return 'Claude models with large context window';
+            default: return 'AI Provider';
+        }
+    }
+
+    getProviderStatus() {
+        return {
+            currentProvider: this.provider,
+            ollamaAvailable: this.ollamaAvailable,
+            fallbackEnabled: this.enableFallback,
+            providerPriority: this.providerPriority
+        };
     }
 
     async getAvailableModels() {

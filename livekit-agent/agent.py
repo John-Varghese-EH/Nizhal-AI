@@ -309,7 +309,7 @@ class VoiceAIAgent:
             logger.error(f"❌ Assistant error: {error}", exc_info=True)
 
 
-async def main(personality: str = None):
+def main(personality: str = None):
     """
     Main function to run the agent worker
     
@@ -339,7 +339,7 @@ async def main(personality: str = None):
         agent = VoiceAIAgent(personality=selected_personality)
         
         # Start worker
-        await cli.run_app(
+        cli.run_app(
             WorkerOptions(
                 entrypoint_fnc=agent.entrypoint,
                 # Worker will automatically join rooms or wait for assignments
@@ -358,4 +358,4 @@ async def main(personality: str = None):
 
 if __name__ == "__main__":
     # Run the agent
-    asyncio.run(main())
+    main()

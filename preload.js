@@ -2,8 +2,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 const validChannels = {
     window: ['minimize', 'maximize', 'close', 'setClickThrough', 'setAlwaysOnTop', 'setOpacity', 'showChat', 'hideChat', 'moveCharacter', 'toggleDetection', 'getState'],
-    character: ['show', 'hide', 'toggleAlwaysOnTop', 'snap', 'setClickThrough', 'toggleGravity', 'jump', 'setModel', 'toggleGame', 'setSize'],
-    system: ['getVolume', 'setVolume', 'getBrightness', 'setBrightness', 'launchApp', 'getSystemInfo'],
+    character: ['show', 'hide', 'toggleAlwaysOnTop', 'snap', 'setClickThrough', 'toggleGravity', 'jump', 'setModel', 'toggleGame', 'setSize', 'setPosition', 'getPosition'],
+    system: ['getVolume', 'setVolume', 'getBrightness', 'setBrightness', 'launchApp', 'getSystemInfo', 'getStats'],
     privacy: ['getMode', 'setMode'],
     persona: ['getActive', 'setActive', 'getAll', 'getState', 'updateMood'],
     memory: ['getHistory', 'search', 'addEntry', 'getUserPreferences', 'setUserPreferences'],

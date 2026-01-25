@@ -11,20 +11,48 @@ export class WeatherService {
     }
 
     /**
-     * Get current weather for coordinates
-     * @param {number} lat - Latitude (default: Kochi, India for demo)
-     * @param {number} lon - Longitude
+     * Resolve city name to coordinates
+     * @param {string} city - City name
      */
-    async getWeather(lat = 9.9312, lon = 76.2673) {
+    async resolveLocation(city) {
+        try {
+            const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`);
+            const data = await response.json();
+
+            if (data.results && data.results.length > 0) {
+                const result = data.results[0];
+                return {
+                    lat: result.latitude,
+                    lon: result.longitude,
+                    name: `${result.name}, ${result.country_code}`.toUpperCase()
+                };
+            }
+            throw new Error('City not found');
+        } catch (error) {
+            console.error('[WeatherService] Geocoding failed:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Get current weather for coordinates
+     * @param {number} lat - Latitude
+     * @param {number} lon - Longitude
+     * @param {string} locationName - Display name
+     */
+    async getWeather(lat = 9.9312, lon = 76.2673, locationName = "Kochi, IN") {
+        // Cache key includes location to enable switching
+        const cacheKey = `${lat},${lon}`;
+
         // Cache for 15 minutes
         const now = Date.now();
-        if (this.cache && (now - this.lastFetch < 15 * 60 * 1000)) {
+        if (this.cache && this.cache.key === cacheKey && (now - this.lastFetch < 15 * 60 * 1000)) {
             console.log('[Weather] Serving from cache');
-            return this.cache;
+            return this.cache.data;
         }
 
         try {
-            console.log('[Weather] Fetching from OpenMeteo...');
+            console.log(`[Weather] Fetching for ${locationName}...`);
             const url = `${this.baseUrl}?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min&timezone=auto`;
             const response = await fetch(url);
             const data = await response.json();
@@ -37,11 +65,11 @@ export class WeatherService {
                 humidity: data.current.relative_humidity_2m,
                 high: Math.round(data.daily.temperature_2m_max[0]),
                 low: Math.round(data.daily.temperature_2m_min[0]),
-                location: "Kochi, IN", // In reality, we'd use a geocoding API or browser geolocation
+                location: locationName,
                 isMock: false
             };
 
-            this.cache = weather;
+            this.cache = { key: cacheKey, data: weather };
             this.lastFetch = now;
             return weather;
 

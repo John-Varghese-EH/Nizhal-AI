@@ -45,6 +45,20 @@ const FullDashboard = ({
         connection: 'Offline'
     });
     const [lifeData, setLifeData] = useState({ weather: null, events: [] });
+    const [objectDetectionEnabled, setObjectDetectionEnabled] = useState(false);
+
+    // Load object detection preference
+    useEffect(() => {
+        const loadPreferences = async () => {
+            try {
+                const prefs = await window.nizhal?.memory?.getUserPreferences();
+                setObjectDetectionEnabled(prefs?.objectDetectionEnabled || false);
+            } catch (error) {
+                console.error('Failed to load preferences:', error);
+            }
+        };
+        loadPreferences();
+    }, []);
 
     useEffect(() => {
         if (activeTab === 'life') {
@@ -177,6 +191,7 @@ const FullDashboard = ({
                             enabled={isCameraEnabled}
                             onToggle={onCameraToggle}
                             privacyMode={privacyMode}
+                            enableObjectDetection={objectDetectionEnabled}
                             showControls={true}
                             className="aspect-video"
                         />
@@ -316,7 +331,7 @@ const FullDashboard = ({
                                                     lifeData.events.map(event => (
                                                         <div key={event.id} className="flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5">
                                                             <div className={`w-1 h-8 rounded-full ${event.type === 'work' ? 'bg-cyan-400' :
-                                                                    event.type === 'personal' ? 'bg-purple-400' : 'bg-green-400'
+                                                                event.type === 'personal' ? 'bg-purple-400' : 'bg-green-400'
                                                                 }`} />
                                                             <div>
                                                                 <p className="font-medium">{event.title}</p>
