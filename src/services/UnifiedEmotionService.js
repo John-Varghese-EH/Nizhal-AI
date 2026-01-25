@@ -23,17 +23,24 @@ class UnifiedEmotionService {
             // QuickMenu emotions -> Standard
             'happy': 'happy',
             'sad': 'sad',
-            'thinking': 'neutral',
+            'thinking': 'thinking',
             'excited': 'excited',
-            'playful': 'happy',
+            'playful': 'playful',
             // MoodTracker emotions -> Standard
-            'calm': 'neutral',
-            'anxious': 'sad',
+            'calm': 'calm',
+            'anxious': 'anxious',
+            // New expanded emotions
+            'love': 'love',
+            'angry': 'angry',
+            'surprised': 'surprised',
+            'confused': 'confused',
+            'sleepy': 'sleepy',
+            'focused': 'focused',
             // Standard emotions
             'neutral': 'neutral'
         };
 
-        // Emoji for each emotion
+        // Emoji for each emotion (expanded set)
         this.emotionEmojis = {
             happy: '😊',
             sad: '😢',
@@ -42,7 +49,30 @@ class UnifiedEmotionService {
             thinking: '🤔',
             playful: '😜',
             calm: '😌',
-            anxious: '😰'
+            anxious: '😰',
+            // New emotions
+            love: '🥰',
+            angry: '😠',
+            surprised: '😲',
+            confused: '😕',
+            sleepy: '😴',
+            focused: '🎯'
+        };
+
+        // Context keywords for auto-detection
+        this.emotionKeywords = {
+            happy: ['happy', 'great', 'awesome', 'wonderful', 'good', 'nice', 'yay', 'haha', 'lol', '😊', '😄'],
+            sad: ['sad', 'sorry', 'miss', 'lonely', 'cry', 'tears', 'hurt', 'pain', '😢', '😭'],
+            love: ['love', 'heart', 'adore', 'kiss', 'hug', 'darling', 'sweetheart', 'babe', '❤️', '💕', '🥰'],
+            angry: ['angry', 'mad', 'hate', 'annoyed', 'frustrated', 'upset', '😠', '😡'],
+            surprised: ['wow', 'omg', 'what', 'really', 'amazing', 'incredible', 'shocked', '😲', '😮'],
+            confused: ['confused', 'what', 'huh', 'dont understand', "don't get", 'help', '😕', '🤷'],
+            excited: ['excited', 'cant wait', "can't wait", 'awesome', 'amazing', 'woohoo', '🎉', '🤩'],
+            sleepy: ['tired', 'sleepy', 'exhausted', 'yawn', 'bed', 'night', 'sleep', '😴', '💤'],
+            focused: ['focus', 'concentrate', 'work', 'study', 'productive', 'busy', '🎯', '💪'],
+            anxious: ['worried', 'anxious', 'nervous', 'stress', 'scared', 'afraid', '😰', '😟'],
+            calm: ['calm', 'peaceful', 'relax', 'chill', 'zen', 'breathe', '😌', '🧘'],
+            thinking: ['think', 'hmm', 'maybe', 'wonder', 'consider', '🤔']
         };
     }
 
@@ -177,19 +207,67 @@ class UnifiedEmotionService {
     }
 
     /**
-     * Get all available emotions
+     * Get all available emotions (expanded set)
      */
     getAvailableEmotions() {
         return [
-            { id: 'happy', emoji: '😊', label: 'Happy' },
-            { id: 'sad', emoji: '😢', label: 'Sad' },
-            { id: 'neutral', emoji: '😐', label: 'Neutral' },
-            { id: 'excited', emoji: '🤩', label: 'Excited' },
-            { id: 'calm', emoji: '😌', label: 'Calm' },
-            { id: 'anxious', emoji: '😰', label: 'Anxious' },
-            { id: 'thinking', emoji: '🤔', label: 'Thinking' },
-            { id: 'playful', emoji: '😜', label: 'Playful' }
+            { id: 'happy', emoji: '😊', label: 'Happy', category: 'positive' },
+            { id: 'love', emoji: '🥰', label: 'Love', category: 'positive' },
+            { id: 'excited', emoji: '🤩', label: 'Excited', category: 'positive' },
+            { id: 'playful', emoji: '😜', label: 'Playful', category: 'positive' },
+            { id: 'calm', emoji: '😌', label: 'Calm', category: 'neutral' },
+            { id: 'neutral', emoji: '😐', label: 'Neutral', category: 'neutral' },
+            { id: 'thinking', emoji: '🤔', label: 'Thinking', category: 'neutral' },
+            { id: 'focused', emoji: '🎯', label: 'Focused', category: 'neutral' },
+            { id: 'confused', emoji: '😕', label: 'Confused', category: 'neutral' },
+            { id: 'sleepy', emoji: '😴', label: 'Sleepy', category: 'neutral' },
+            { id: 'sad', emoji: '😢', label: 'Sad', category: 'negative' },
+            { id: 'anxious', emoji: '😰', label: 'Anxious', category: 'negative' },
+            { id: 'angry', emoji: '😠', label: 'Angry', category: 'negative' },
+            { id: 'surprised', emoji: '😲', label: 'Surprised', category: 'mixed' }
         ];
+    }
+
+    /**
+     * Detect emotion from text content
+     */
+    detectFromText(text) {
+        if (!text) return 'neutral';
+
+        const lowerText = text.toLowerCase();
+        const scores = {};
+
+        for (const [emotion, keywords] of Object.entries(this.emotionKeywords)) {
+            scores[emotion] = 0;
+            for (const keyword of keywords) {
+                if (lowerText.includes(keyword.toLowerCase())) {
+                    scores[emotion]++;
+                }
+            }
+        }
+
+        // Find highest scoring emotion
+        let detected = 'neutral';
+        let maxScore = 0;
+        for (const [emotion, score] of Object.entries(scores)) {
+            if (score > maxScore) {
+                detected = emotion;
+                maxScore = score;
+            }
+        }
+
+        return maxScore > 0 ? detected : 'neutral';
+    }
+
+    /**
+     * Auto-set emotion from text (for chat context)
+     */
+    async autoDetectAndSet(text, source = 'auto') {
+        const detected = this.detectFromText(text);
+        if (detected !== 'neutral' && detected !== this.currentEmotion) {
+            await this.setEmotion(detected, source);
+        }
+        return detected;
     }
 
     /**
