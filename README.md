@@ -10,7 +10,7 @@
 
   [![License](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Mac%20%7C%20Linux-blue.svg)](https://electronjs.org)
-  [![Status](https://img.shields.io/badge/status-Active%20Beta-brightgreen.svg)]()
+  [![Status](https://img.shields.io/badge/status-Active%20Alpha-brightgreen.svg)]()
 
   [⬇️ **Download for Windows**](https://github.com/John-Varghese-EH/Nizhal-AI/releases) • [💬 **Join Discord**](#) • [✨ **View Features**](#features)
 
@@ -21,8 +21,6 @@
 ## ✨ Why Nizhal?
 
 Nizhal (നിഴൽ) means **"Shadow"** in Malayalam. Just like a shadow, this AI companion stays by your side, evolving with you, remembering your life, and offering emotional support when you need it most. 
-
-It's **100% FREE**, **Local-First**, and built with ❤️ for students and developers.
 
 ---
 
