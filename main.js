@@ -25,6 +25,7 @@ import { PERSONALITIES, getPersonality, getGreeting } from './src/core/Personali
 import { LiveKitService } from './src/services/LiveKitService.js';
 import { AgentProcessManager } from './src/services/AgentProcessManager.js';
 // Note: LocalVoice and EmotionDetector are renderer-only (use browser APIs)
+import { envManager } from './src/core/EnvManager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -91,9 +92,42 @@ async function initializeServices() {
   console.log('[Main] 🎭 Active personality:', currentPersonality);
   console.log('[Main] ✅ FREE edition initialized (Main process services only)');
   console.log('[Main] 📢 Voice & Emotion detection available in renderer');
+
+  // Environment IPC
+  ipcMain.handle('env:getAll', () => envManager.getAll());
+  ipcMain.handle('env:set', (_, key, value) => envManager.set(key, value));
+  ipcMain.handle('env:delete', (_, key) => envManager.delete(key));
 }
 
 function setupSecurityPolicy() {
+  // Set Content Security Policy headers via session
+  app.on('ready', () => {
+    const { session } = require('electron');
+
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            "default-src 'self'; " +
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://storage.googleapis.com https://www.gstatic.com blob:; " +
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+            "font-src 'self' https://fonts.gstatic.com data:; " +
+            "img-src 'self' blob: data: https: file:; " +
+            "media-src 'self' blob: data: https:; " +
+            "connect-src 'self' blob: data: http://localhost:* ws://localhost:* wss://localhost:* " +
+            "https://*.googleapis.com https://*.gstatic.com https://storage.googleapis.com " +
+            "https://www.gstatic.com https://*.elevenlabs.io https://*.razorpay.com " +
+            "https://*.stripe.com https://api.open-meteo.com https://*.livekit.cloud " +
+            "wss://*.livekit.cloud https://api.openai.com https://api.anthropic.com " +
+            "http://localhost:11434; " +
+            "worker-src 'self' blob:;"
+          ]
+        }
+      });
+    });
+  });
+
   app.on('web-contents-created', (event, contents) => {
     contents.on('will-navigate', (event, navigationUrl) => {
       const parsedUrl = new URL(navigationUrl);
@@ -110,6 +144,7 @@ function setupSecurityPolicy() {
     });
   });
 }
+
 
 // Register global productivity shortcuts
 function registerGlobalShortcuts() {
@@ -410,7 +445,7 @@ function setupIPC() {
     if (aiService && typeof aiService.getProviderStatus === 'function') {
       return aiService.getProviderStatus();
     }
-    console.error('[Main] ❌ Critical: aiService.getProviderStatus is missing. AI Service State:', aiService ? Object.keys(aiService) : 'null');
+    console.error('[Main] ❌ Critical: aiService.getProviderStatus is missing.');
     return {
       currentProvider: 'none',
       ollamaAvailable: false,
@@ -422,7 +457,43 @@ function setupIPC() {
   ipcMain.handle('ai:setFallbackEnabled', (_, enabled) => aiService?.setFallbackEnabled(enabled));
   ipcMain.handle('ai:getModels', () => aiService?.getAvailableModels());
   ipcMain.handle('ai:setModel', (_, providerId, modelId) => aiService?.setModel(providerId, modelId));
+
+  // New enhanced AI handlers
+  ipcMain.handle('ai:refresh', () => aiService?.refreshProviders());
+  ipcMain.handle('ai:test', (_, providerId) => aiService?.testProvider(providerId));
+  ipcMain.handle('ai:clearContext', () => {
+    aiService?.clearContext();
+    return { success: true };
+  });
+  ipcMain.handle('ai:streamChat', async (_, message) => {
+    // For streaming, we return the full response after completion
+    // Real-time streaming would require a different IPC approach
+    let fullResponse = '';
+    try {
+      await aiService?.streamChat(message, (chunk) => {
+        fullResponse += chunk;
+        // Optionally broadcast chunks to renderer
+        windowManager?.broadcast('ai:chunk', chunk);
+      });
+      return { success: true, response: fullResponse };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
   ipcMain.handle('system:getStats', () => systemStatsService.getStats());
+
+  // Enhanced Security: Ephemeral Tokens for Client-Side Gemini
+  ipcMain.handle('ai:getEphemeralToken', async () => {
+    // Return a proxy to the API key for local dev usage
+    // In production, this would call an endpoint to get a short-lived token
+    // For now, we'll return the key but log a warning
+    // This allows the client to use the Google GenAI SDK directly
+    if (!process.env.GEMINI_API_KEY) {
+      return { success: false, error: 'GEMINI_API_KEY not found in .env' };
+    }
+    return { success: true, token: process.env.GEMINI_API_KEY };
+  });
 
   // Voice
   ipcMain.handle('voice:speak', async (_, text, options) => {

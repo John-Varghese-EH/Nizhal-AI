@@ -123,6 +123,10 @@ export class VRMAAnimationService {
         this.vrm = vrm;
         this.mixer = new THREE.AnimationMixer(vrm.scene);
 
+        // NOTE: Do NOT apply rest pose here - let VRM use its natural default pose
+        // Rest pose will only be applied as fallback if ALL animations fail to load
+        // The VRM model's built-in pose is better than our manual bone rotations
+
         // Create lookAt proxy if VRM has lookAt
         if (vrm.lookAt) {
             this.lookAtProxy = new VRMLookAtQuaternionProxy(vrm.lookAt);
@@ -527,16 +531,38 @@ export class VRMAAnimationService {
 
         console.log('[VRMAAnimationService] Applying natural rest pose (fallback)');
 
-        // Natural rest pose bone rotations - arms DOWN at sides
+        // Natural rest pose bone rotations - arms DOWN at sides, UPRIGHT posture
+        // All rotations in radians: x=pitch, y=yaw, z=roll
         const restPose = {
-            leftUpperArm: { x: 0.1, y: 0, z: 1.2 },    // Arms down at sides
+            // Arms - lowered to sides (z rotation ~70 degrees = 1.2 rad)
+            leftUpperArm: { x: 0.1, y: 0, z: 1.2 },
             rightUpperArm: { x: 0.1, y: 0, z: -1.2 },
-            leftLowerArm: { x: 0.1, y: 0, z: 0 },      // Slight natural bend
-            rightLowerArm: { x: 0.1, y: 0, z: 0 },
-            leftHand: { x: 0, y: 0, z: 0 },            // Hands relaxed
+            leftLowerArm: { x: 0.15, y: 0, z: 0 },      // Slight natural bend
+            rightLowerArm: { x: 0.15, y: 0, z: 0 },
+            leftHand: { x: 0, y: 0, z: 0 },
             rightHand: { x: 0, y: 0, z: 0 },
+
+            // Shoulders - neutral (prevent hunching)
+            leftShoulder: { x: 0, y: 0, z: 0 },
+            rightShoulder: { x: 0, y: 0, z: 0 },
+
+            // Torso - upright, no bend (x=0 means upright, positive = forward lean)
+            hips: { x: 0, y: 0, z: 0 },
             spine: { x: 0, y: 0, z: 0 },
-            head: { x: 0, y: 0, z: 0 }
+            chest: { x: 0, y: 0, z: 0 },
+            upperChest: { x: 0, y: 0, z: 0 },
+
+            // Neck and Head - looking STRAIGHT AHEAD, not down
+            neck: { x: 0, y: 0, z: 0 },
+            head: { x: 0, y: 0, z: 0 },  // x=0 = straight, negative = look up, positive = look down
+
+            // Legs - straight, slight natural stance
+            leftUpperLeg: { x: 0, y: 0, z: 0 },
+            rightUpperLeg: { x: 0, y: 0, z: 0 },
+            leftLowerLeg: { x: 0, y: 0, z: 0 },
+            rightLowerLeg: { x: 0, y: 0, z: 0 },
+            leftFoot: { x: 0, y: 0, z: 0 },
+            rightFoot: { x: 0, y: 0, z: 0 }
         };
 
         // Apply rotations to bones
@@ -547,11 +573,12 @@ export class VRMAAnimationService {
                     bone.rotation.set(rotation.x, rotation.y, rotation.z);
                 }
             } catch (e) {
-                // Bone might not exist in this model
+                // Bone might not exist in this model - that's OK
             }
         }
 
         this.fallbackPoseApplied = true;
+        console.log('[VRMAAnimationService] Natural rest pose applied successfully');
     }
 
 
@@ -717,44 +744,44 @@ export class VRMAAnimationService {
      */
     static EMOTION_ANIMATIONS = {
         happy: {
-            animations: ['02_Greeting', '11_Hello', '17_Smile_World', '18_Lovely_World'],
+            animations: ['greeting', 'hello'], // Use library keys
             category: 'greeting',
             expression: 'happy',
             expressionIntensity: 0.8
         },
         excited: {
-            animations: ['05_Spin', '03_Peace_Sign', '14_Gekirei', '19_Cute_Sparkle_World'],
+            animations: ['spin', 'peace_sign', 'shoot'],
             category: 'action',
             expression: 'happy',
             expressionIntensity: 1.0
         },
         sad: {
-            animations: ['09_Dogeza', '15_Gatan'],
-            category: 'emotion',
+            animations: ['bow'],
+            category: 'reaction',
             expression: 'sad',
             expressionIntensity: 0.7
         },
         thinking: {
-            animations: ['08_Motion_Pose', '12_Smartphone'],
+            animations: ['model_pose', 'smartphone'],
             category: 'idle',
             expression: 'neutral',
             expressionIntensity: 0.5,
             lookUp: true
         },
         neutral: {
-            animations: ['17_Smile_World', '18_Lovely_World', '20_Connected_World'],
+            animations: ['model_pose', 'hello', 'smartphone'],
             category: 'idle',
             expression: 'neutral',
             expressionIntensity: 0.3
         },
         concerned: {
-            animations: ['15_Gatan', '09_Dogeza'],
-            category: 'emotion',
+            animations: ['bow'],
+            category: 'reaction',
             expression: 'sad',
             expressionIntensity: 0.5
         },
         playful: {
-            animations: ['05_Spin', '03_Peace_Sign', '04_Shoot'],
+            animations: ['spin', 'peace_sign', 'shoot'],
             category: 'action',
             expression: 'happy',
             expressionIntensity: 0.6

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Attribution from './Attribution';
 import LegalDocumentViewer from './LegalDocumentViewer';
+import { Key, Eye, EyeOff, Lock, Plus, Trash2, Edit2, Save, X } from 'lucide-react';
 
 const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacyToggle, isModal = false, userProfile, onProfileChange }) => {
     const [preferences, setPreferences] = useState({});
@@ -15,6 +16,78 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
     const [activeTab, setActiveTab] = useState('general');
     const [availableModels, setAvailableModels] = useState([]);
     const [showLegalModal, setShowLegalModal] = useState(null);
+
+    // Secrets Management State
+    const [secrets, setSecrets] = useState({});
+    const [visibleSecrets, setVisibleSecrets] = useState(new Set());
+    const [editingSecret, setEditingSecret] = useState(null); // { key, value }
+    const [newSecret, setNewSecret] = useState({ key: '', value: '' });
+
+    const [isAddingSecret, setIsAddingSecret] = useState(false);
+
+    // Custom Provider State
+    const [customBaseUrl, setCustomBaseUrl] = useState('');
+    const [customModelName, setCustomModelName] = useState('');
+    const [customProviderName, setCustomProviderName] = useState('');
+
+    useEffect(() => {
+        if (activeTab === 'secrets') {
+            loadSecrets();
+        }
+    }, [activeTab]);
+
+    const loadSecrets = async () => {
+        try {
+            const envVars = await window.nizhal?.env?.getAll();
+            setSecrets(envVars || {});
+        } catch (error) {
+            console.error('Failed to load secrets:', error);
+        }
+    };
+
+    const toggleSecretVisibility = (key) => {
+        setVisibleSecrets(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
+    };
+
+    const handleSaveSecret = async (key, value) => {
+        if (!key) return;
+        setIsSaving(true);
+        try {
+            const success = await window.nizhal?.env?.set(key, value);
+            if (success) {
+                setSecrets(prev => ({ ...prev, [key]: value }));
+                setEditingSecret(null);
+                setNewSecret({ key: '', value: '' });
+                setIsAddingSecret(false);
+            }
+        } catch (error) {
+            console.error('Failed to save secret:', error);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleDeleteSecret = async (key) => {
+        if (!confirm(`Are you sure you want to delete ${key}?`)) return;
+        setIsSaving(true);
+        try {
+            const success = await window.nizhal?.env?.delete(key);
+            if (success) {
+                const newSecrets = { ...secrets };
+                delete newSecrets[key];
+                setSecrets(newSecrets);
+            }
+        } catch (error) {
+            console.error('Failed to delete secret:', error);
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
 
 
@@ -36,6 +109,14 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
             const models = await window.nizhal?.ai.getModels();
 
             setPreferences(prefs || {});
+
+            // Restore Custom Provider State
+            if (prefs && prefs.customConfig) {
+                setCustomBaseUrl(prefs.customConfig.baseUrl || '');
+                setCustomModelName(prefs.customConfig.model || '');
+                setCustomProviderName(prefs.customConfig.name || '');
+            }
+
             setPersonas(allPersonas || []);
             setActivePersonaId(active?.id || 'jarvis');
             setAiProviders(providers || []);
@@ -84,16 +165,44 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
     };
 
     const handleSaveApiKey = async () => {
-        if (!showApiKeyModal || !apiKeyValue.trim()) return;
+        if (!showApiKeyModal) return;
+
+        // Validation
+        if (showApiKeyModal === 'custom') {
+            if (!customBaseUrl.trim() || !apiKeyValue.trim()) {
+                alert('API Key and Base URL are required');
+                return;
+            }
+        } else {
+            if (!apiKeyValue.trim()) return;
+        }
 
         setIsSaving(true);
         try {
             const updatedApiKeys = { ...preferences.apiKeys, [showApiKeyModal]: apiKeyValue.trim() };
+            // Save Keys
             await window.nizhal?.memory.setUserPreferences({ apiKeys: updatedApiKeys });
             setPreferences(prev => ({ ...prev, apiKeys: updatedApiKeys }));
 
-            // Update the provider configuration
-            await window.nizhal?.ai.setProvider(showApiKeyModal, { apiKey: apiKeyValue.trim() });
+            // Save Custom Config specifics
+            if (showApiKeyModal === 'custom') {
+                const customConfig = {
+                    baseUrl: customBaseUrl.trim(),
+                    model: customModelName.trim(),
+                    name: customProviderName.trim() || 'Custom Provider'
+                };
+                await window.nizhal?.memory.setUserPreferences({ customConfig });
+
+                // Update provider immediately
+                await window.nizhal?.ai.setProvider('custom', {
+                    apiKey: apiKeyValue.trim(),
+                    baseUrl: customBaseUrl.trim(),
+                    model: customModelName.trim()
+                });
+            } else {
+                // Update standard provider
+                await window.nizhal?.ai.setProvider(showApiKeyModal, { apiKey: apiKeyValue.trim() });
+            }
 
             // Refresh provider status
             const status = await window.nizhal?.ai.getProviderStatus();
@@ -223,6 +332,7 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
                 <TabButton id="character" label="Character" active={activeTab === 'character'} />
                 <TabButton id="ai" label="AI Providers" active={activeTab === 'ai'} />
                 <TabButton id="voice" label="Voice" active={activeTab === 'voice'} />
+                <TabButton id="secrets" label="Secrets" active={activeTab === 'secrets'} />
                 <TabButton id="shortcuts" label="Shortcuts" active={activeTab === 'shortcuts'} />
                 <TabButton id="about" label="About" active={activeTab === 'about'} />
             </div>
@@ -854,6 +964,159 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
                             </motion.div>
                         )}
 
+
+                        {activeTab === 'secrets' && (
+                            <motion.div
+                                key="secrets"
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 20 }}
+                                className="space-y-6"
+                            >
+                                <div className="p-4 rounded-xl bg-gradient-to-br from-amber-500/10 to-red-500/10 border border-amber-500/20">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <Lock className="text-amber-400" size={20} />
+                                        <h3 className="text-sm font-medium text-white">Environment Secrets</h3>
+                                    </div>
+                                    <p className="text-xs text-white/50">
+                                        Manage your API keys and sensitive configuration stored in .env file.
+                                        Changes applied immediately require restart for some services.
+                                    </p>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-center">
+                                        <h3 className="text-sm font-medium text-white/70">Secrets List</h3>
+                                        <motion.button
+                                            whileTap={{ scale: 0.95 }}
+                                            onClick={() => setIsAddingSecret(true)}
+                                            className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 rounded-lg text-xs flex items-center gap-1.5"
+                                        >
+                                            <Plus size={14} /> Add New
+                                        </motion.button>
+                                    </div>
+
+                                    {/* Add New Secret Form */}
+                                    {isAddingSecret && (
+                                        <div className="p-4 rounded-xl bg-white/5 border border-indigo-500/30 space-y-3">
+                                            <div>
+                                                <label className="text-xs text-white/50 block mb-1">Key Name (uppercase)</label>
+                                                <input
+                                                    type="text"
+                                                    value={newSecret.key}
+                                                    onChange={(e) => setNewSecret(prev => ({ ...prev, key: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '') }))}
+                                                    placeholder="MY_API_KEY"
+                                                    className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-indigo-500/50 outline-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs text-white/50 block mb-1">Value</label>
+                                                <input
+                                                    type="text"
+                                                    value={newSecret.value}
+                                                    onChange={(e) => setNewSecret(prev => ({ ...prev, value: e.target.value }))}
+                                                    placeholder="Secret value..."
+                                                    className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-indigo-500/50 outline-none"
+                                                />
+                                            </div>
+                                            <div className="flex justify-end gap-2 pt-1">
+                                                <button
+                                                    onClick={() => setIsAddingSecret(false)}
+                                                    className="px-3 py-1.5 text-xs text-white/50 hover:text-white"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={() => handleSaveSecret(newSecret.key, newSecret.value)}
+                                                    disabled={!newSecret.key}
+                                                    className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs disabled:opacity-50"
+                                                >
+                                                    Save Secret
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Existing Secrets */}
+                                    <div className="space-y-2">
+                                        {Object.entries(secrets).map(([key, value]) => {
+                                            const isEditing = editingSecret?.key === key;
+                                            const isVisible = visibleSecrets.has(key);
+
+                                            return (
+                                                <div key={key} className="p-3 bg-white/5 border border-white/10 rounded-xl group hover:border-white/20 transition-colors">
+                                                    {isEditing ? (
+                                                        <div className="flex gap-2 items-center">
+                                                            <div className="flex-1">
+                                                                <div className="text-xs font-mono text-indigo-400 mb-1">{key}</div>
+                                                                <input
+                                                                    type="text"
+                                                                    value={editingSecret.value}
+                                                                    onChange={(e) => setEditingSecret({ ...editingSecret, value: e.target.value })}
+                                                                    className="w-full bg-black/20 border border-white/10 rounded-lg px-2 py-1 text-sm text-white outline-none focus:border-indigo-500/50"
+                                                                    autoFocus
+                                                                />
+                                                            </div>
+                                                            <button
+                                                                onClick={() => handleSaveSecret(key, editingSecret.value)}
+                                                                className="p-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30"
+                                                            >
+                                                                <Save size={16} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setEditingSecret(null)}
+                                                                className="p-2 bg-white/10 text-white/70 rounded-lg hover:bg-white/20"
+                                                            >
+                                                                <X size={16} />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex-1 min-w-0 pr-4">
+                                                                <div className="text-xs font-mono text-indigo-400 mb-0.5">{key}</div>
+                                                                <div className="text-sm text-white/70 font-mono truncate">
+                                                                    {isVisible ? value : '•'.repeat(Math.min(value.length, 24) || 8)}
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                <button
+                                                                    onClick={() => toggleSecretVisibility(key)}
+                                                                    className="p-1.5 text-white/40 hover:text-white rounded-lg hover:bg-white/10"
+                                                                    title={isVisible ? "Hide" : "Show"}
+                                                                >
+                                                                    {isVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setEditingSecret({ key, value })}
+                                                                    className="p-1.5 text-white/40 hover:text-cyan-400 rounded-lg hover:bg-cyan-500/10"
+                                                                    title="Edit"
+                                                                >
+                                                                    <Edit2 size={14} />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleDeleteSecret(key)}
+                                                                    className="p-1.5 text-white/40 hover:text-red-400 rounded-lg hover:bg-red-500/10"
+                                                                    title="Delete"
+                                                                >
+                                                                    <Trash2 size={14} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                        {Object.keys(secrets).length === 0 && !isAddingSecret && (
+                                            <div className="text-center py-8 text-white/30 text-sm">
+                                                No secrets found in .env
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+
                         {activeTab === 'shortcuts' && (
                             <motion.div
                                 key="shortcuts"
@@ -968,13 +1231,58 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
                                 {apiKeyConfigs.find(a => a.id === showApiKeyModal)?.description}
                             </p>
 
-                            <input
-                                type="password"
-                                value={apiKeyValue}
-                                onChange={(e) => setApiKeyValue(e.target.value)}
-                                placeholder="Enter your API key"
-                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/30 focus:outline-none focus:border-indigo-500/50 mb-3"
-                            />
+                            {showApiKeyModal === 'custom' ? (
+                                <div className="space-y-3 mb-4">
+                                    <div>
+                                        <label className="text-xs text-white/50 block mb-1">Provider Name</label>
+                                        <input
+                                            type="text"
+                                            value={customProviderName}
+                                            onChange={(e) => setCustomProviderName(e.target.value)}
+                                            placeholder="e.g. Groq, DeepSeek"
+                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-white/50 block mb-1">Base URL (Required)</label>
+                                        <input
+                                            type="text"
+                                            value={customBaseUrl}
+                                            onChange={(e) => setCustomBaseUrl(e.target.value)}
+                                            placeholder="https://api.groq.com/openai/v1"
+                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white font-mono focus:outline-none focus:border-indigo-500/50"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-white/50 block mb-1">API Key (Required)</label>
+                                        <input
+                                            type="password"
+                                            value={apiKeyValue}
+                                            onChange={(e) => setApiKeyValue(e.target.value)}
+                                            placeholder="sk-..."
+                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-white/50 block mb-1">Model ID (Optional)</label>
+                                        <input
+                                            type="text"
+                                            value={customModelName}
+                                            onChange={(e) => setCustomModelName(e.target.value)}
+                                            placeholder="llama3-70b-8192"
+                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white font-mono focus:outline-none focus:border-indigo-500/50"
+                                        />
+                                    </div>
+                                </div>
+                            ) : (
+                                <input
+                                    type="password"
+                                    value={apiKeyValue}
+                                    onChange={(e) => setApiKeyValue(e.target.value)}
+                                    placeholder="Enter your API key"
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/30 focus:outline-none focus:border-indigo-500/50 mb-3"
+                                />
+                            )}
 
                             <motion.button
                                 whileTap={{ scale: 0.95 }}

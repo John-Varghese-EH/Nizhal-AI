@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     MessageSquare, Activity, Settings, Layout,
     Wifi, Shield, ShieldOff, Mic, MicOff,
-    Video, VideoOff, Power, Menu, X, Phone
+    Video, VideoOff, Power, Menu, X, Phone,
+    Key, Eye, EyeOff, Lock, Plus, Trash2, Edit2, Save
 } from 'lucide-react';
 import WindowControls from '../WindowControls';
 import CameraFeed from '../CameraFeed';

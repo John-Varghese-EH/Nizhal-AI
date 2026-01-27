@@ -15,6 +15,7 @@ export class LiveKitVoiceService {
         this.room = null;
         this.localAudioTrack = null;
         this.isConnected = false;
+        this.isConnecting = false;
         this.isMuted = false;
         this.agentAudioElement = null;
 
@@ -39,6 +40,13 @@ export class LiveKitVoiceService {
             return { success: true };
         }
 
+        if (this.isConnecting) {
+            console.log('[LiveKitVoice] Connection already in progress');
+            return { success: false, error: 'Connection in progress' };
+        }
+
+        this.isConnecting = true;
+
         try {
             // Create room
             this.room = new Room({
@@ -57,10 +65,16 @@ export class LiveKitVoiceService {
             // Connect to room
             await this.room.connect(url, token);
 
+            // Check if we were disconnected during connection (race condition)
+            if (!this.room || this.room.state === 'disconnected') {
+                throw new Error('Connection was aborted');
+            }
+
             // Publish microphone
             await this.publishMicrophone();
 
             this.isConnected = true;
+            this.isConnecting = false;
             console.log('[LiveKitVoice] Connected successfully');
 
             if (this.onConnected) {
@@ -69,6 +83,15 @@ export class LiveKitVoiceService {
 
             return { success: true };
         } catch (error) {
+            this.isConnecting = false;
+
+            // Don't log "Client initiated disconnect" as an error - it's expected during cleanup
+            if (error.message?.includes('Client initiated disconnect') ||
+                error.message?.includes('Connection was aborted')) {
+                console.log('[LiveKitVoice] Connection cancelled');
+                return { success: false, error: 'Connection cancelled' };
+            }
+
             console.error('[LiveKitVoice] Connection failed:', error);
 
             if (this.onError) {
@@ -241,4 +264,6 @@ export class LiveKitVoiceService {
     }
 }
 
-export default LiveKitVoiceService;
+// Singleton instance
+export const livekitVoiceService = new LiveKitVoiceService();
+export default livekitVoiceService;

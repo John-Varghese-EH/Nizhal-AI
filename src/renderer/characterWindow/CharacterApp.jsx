@@ -812,18 +812,8 @@ const CharacterApp = () => {
         console.log('[CharacterApp] Profile updated:', newProfile);
     }, []);
 
-    // Dance animation (or screensaver float)
-    const floatAnimation = isScreensaver ? {
-        y: [-20, 20, -20],
-        x: [-50, 50, -50],
-        rotate: [-5, 5, -5]
-    } : {};
-
-    const danceAnimation = isDancing ? {
-        y: [0, -10 * danceIntensity, 0],
-        rotate: [-3 * danceIntensity, 3 * danceIntensity, -3 * danceIntensity],
-        scale: [1, 1 + 0.05 * danceIntensity, 1]
-    } : floatAnimation; // Use float if screensaver and not dancing
+    // NOTE: All character animations now come from VRMA files in /public/assets/animations
+    // CSS-based dance/float animations have been removed to use only VRMA bone animations
 
     // Prevent rendering until window size is detected to avoid "small top-left" glitch
     if (!windowReady) return null;
@@ -883,12 +873,8 @@ const CharacterApp = () => {
                 <motion.div
                     className="relative interactive cursor-pointer w-full h-full flex items-center justify-center"
                     initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: settings.scale, opacity: 1, ...danceAnimation }}
-                    transition={
-                        isDancing ? { repeat: Infinity, duration: 0.4, ease: 'easeInOut' } :
-                            isScreensaver ? { repeat: Infinity, duration: 10, ease: 'easeInOut' } : // Slow float
-                                { type: 'spring', damping: 15 }
-                    }
+                    animate={{ scale: settings.scale, opacity: 1 }}
+                    transition={{ type: 'spring', damping: 15 }}
                     onClick={handleAvatarClick}
                     onContextMenu={handleContextMenu}
                     onMouseDown={handleDragStart}

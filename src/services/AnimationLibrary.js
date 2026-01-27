@@ -3,18 +3,25 @@
  * 
  * Centralized animation library for managing VRMA animations.
  * Provides categorized animations, lazy loading, and state-based animation selection.
+ * 
+ * IMPORTANT: All paths must match actual files in /public/assets/animations/
  */
 
 /**
  * Animation categories and their files
- * Paths updated to direct /assets/animations/ folder with standardized naming
+ * Files actually available:
+ * 01_Show_Full_Body.vrma, 02_Greeting.vrma, 03_Peace_Sign.vrma, 04_Shoot.vrma,
+ * 05_Spin.vrma, 06_Model_Pose.vrma, 07_Squat.vrma, 08_Motion_Pose.vrma,
+ * 09_Bow.vrma, 10_Step.vrma, 11_Hello.vrma, 12_Smartphone.vrma,
+ * 13_Drink_Water.vrma, 14_Warm_Up.vrma, 15_Sit.vrma, 17_Smile_World.vrma,
+ * 18_Lovely_World.vrma, 19_Cute_Sparkle_World.vrma, 20_Connected_World.vrma
  */
 const ANIMATION_CATALOG = {
     // Idle animations - subtle movements for standing
     idle: [
         { name: 'motion_pose', path: '/assets/animations/08_Motion_Pose.vrma', duration: 8.0, loop: true },
-        { name: 'humidai', path: '/assets/animations/10_Humidai.vrma', duration: 3.0, loop: true },
-        { name: 'test', path: '/assets/animations/16_Test.vrma', duration: 5.0, loop: true },
+        { name: 'step', path: '/assets/animations/10_Step.vrma', duration: 3.0, loop: true },
+        { name: 'sit', path: '/assets/animations/15_Sit.vrma', duration: 5.0, loop: true },
     ],
 
     // Greeting animations
@@ -36,14 +43,13 @@ const ANIMATION_CATALOG = {
         { name: 'drink_water', path: '/assets/animations/13_Drink_Water.vrma', duration: 5.0, loop: false },
         { name: 'smartphone', path: '/assets/animations/12_Smartphone.vrma', duration: 4.0, loop: true },
         { name: 'squat', path: '/assets/animations/07_Squat.vrma', duration: 4.0, loop: true },
+        { name: 'warm_up', path: '/assets/animations/14_Warm_Up.vrma', duration: 4.0, loop: true },
     ],
 
     // Reaction/Expression animations
     reaction: [
-        { name: 'dogeza', path: '/assets/animations/09_Dogeza.vrma', duration: 3.0, loop: false },
-        { name: 'cheer', path: '/assets/animations/14_Gekirei.vrma', duration: 4.0, loop: false },
-        { name: 'surprise', path: '/assets/animations/15_Gatan.vrma', duration: 2.5, loop: false },
-        { name: 'thinking', path: '/assets/animations/10_Humidai.vrma', duration: 3.0, loop: true },
+        { name: 'bow', path: '/assets/animations/09_Bow.vrma', duration: 3.0, loop: false },
+        { name: 'step', path: '/assets/animations/10_Step.vrma', duration: 2.0, loop: false },
     ],
 
     // Dance animations
@@ -51,7 +57,7 @@ const ANIMATION_CATALOG = {
         { name: 'spin', path: '/assets/animations/05_Spin.vrma', duration: 6.0, loop: true },
     ],
 
-    // Special choreography animations
+    // Special choreography animations (World series)
     special: [
         { name: 'smile_world', path: '/assets/animations/17_Smile_World.vrma', duration: 15.0, loop: true },
         { name: 'lovely_world', path: '/assets/animations/18_Lovely_World.vrma', duration: 15.0, loop: true },
@@ -67,17 +73,19 @@ const ANIMATION_CATALOG = {
 const STATE_ANIMATION_MAP = {
     'idle': { category: 'idle', preference: 'motion_pose', fallback: 'motion_pose' },
     'speaking': { category: 'idle', preference: 'motion_pose', fallback: 'motion_pose' },
-    'thinking': { category: 'reaction', preference: 'thinking', fallback: 'motion_pose' },
+    'thinking': { category: 'idle', preference: 'motion_pose', fallback: 'motion_pose' },
     'listening': { category: 'idle', preference: 'motion_pose', fallback: 'motion_pose' },
-    'dancing': { category: 'dance', preference: 'random', fallback: 'spin' },
+    'dancing': { category: 'dance', preference: 'spin', fallback: 'spin' },
     'greeting': { category: 'greeting', preference: 'greeting', fallback: 'hello' },
-    'happy': { category: 'reaction', preference: 'cheer', fallback: 'motion_pose' },
-    'surprised': { category: 'reaction', preference: 'surprise', fallback: 'motion_pose' },
-    'sleeping': { category: 'idle', preference: 'motion_pose', fallback: 'motion_pose' },
+    'happy': { category: 'greeting', preference: 'hello', fallback: 'motion_pose' },
+    'surprised': { category: 'reaction', preference: 'bow', fallback: 'motion_pose' },
+    'sleeping': { category: 'idle', preference: 'sit', fallback: 'motion_pose' },
     'dragging': { category: 'pose', preference: 'model_pose', fallback: 'motion_pose' },
-    'sitting': { category: 'idle', preference: 'motion_pose', fallback: 'motion_pose' },
+    'sitting': { category: 'idle', preference: 'sit', fallback: 'motion_pose' },
     'posing': { category: 'pose', preference: 'model_pose', fallback: 'peace_sign' },
     'celebrating': { category: 'special', preference: 'random', fallback: 'smile_world' },
+    'working': { category: 'action', preference: 'smartphone', fallback: 'motion_pose' },
+    'exercising': { category: 'action', preference: 'warm_up', fallback: 'squat' },
 };
 
 /**
@@ -159,7 +167,9 @@ export class AnimationLibrary {
         const names = [];
         for (const category of Object.values(this.catalog)) {
             for (const anim of category) {
-                names.push(anim.name);
+                if (!names.includes(anim.name)) {
+                    names.push(anim.name);
+                }
             }
         }
         return names;
@@ -184,7 +194,7 @@ export class AnimationLibrary {
     getIdleGestures() {
         return [
             ...this.catalog.greeting,
-            ...this.catalog.reaction.filter(a => a.name !== 'dogeza'), // Exclude extreme reactions
+            ...this.catalog.reaction,
         ];
     }
 }

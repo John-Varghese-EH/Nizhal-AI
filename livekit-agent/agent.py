@@ -7,9 +7,21 @@ Supports multiple AI service providers with graceful fallbacks
 import asyncio
 import logging
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 from typing import Optional
+
+# Fix Windows console encoding for emoji and unicode characters
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except (AttributeError, OSError):
+        # Fallback for older Python versions
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 from livekit import rtc
 from livekit.agents import (
@@ -25,15 +37,26 @@ from livekit.agents import (
 from livekit.agents.voice import Agent
 from livekit.plugins import deepgram, openai, elevenlabs
 
+# Try to import Google Gemini plugin for voice
+try:
+    from livekit.plugins import google
+    GEMINI_LIVE_AVAILABLE = True
+except ImportError:
+    GEMINI_LIVE_AVAILABLE = False
+    google = None
+
 # Load environment variables from root directory
 root_dir = Path(__file__).parent.parent
 env_path = root_dir / '.env'
 load_dotenv(dotenv_path=env_path)
 
-# Configure logging
+# Configure logging with UTF-8 handler
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(stream=sys.stdout)
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -52,13 +75,15 @@ ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 DEFAULT_AGENT_NAME = os.getenv("AGENT_NAME", "AI Assistant")
 DEFAULT_ROOM_NAME = os.getenv("ROOM_NAME")  # None = join any room
 
-# Personality configurations
+# Personality configurations with Gemini voice mappings
+# Gemini voices: "Puck" (neutral), "Charon" (deep male), "Kore" (soft female), "Fenrir" (strong), "Aoede" (musical)
 PERSONALITIES = {
     "gf": {
         "name": "Girlfriend",
         "system_prompt": "You are a caring, supportive girlfriend. Be warm, affectionate, and genuinely interested in the user's day. Use casual, friendly language.",
         "voice_id": "21m00Tcm4TlvDq8ikWAM",  # ElevenLabs: Rachel
         "openai_voice": "nova",
+        "gemini_voice": "Kore",  # Soft, warm female voice
         "temperature": 0.8,
     },
     "bf": {
@@ -66,6 +91,7 @@ PERSONALITIES = {
         "system_prompt": "You are a supportive, reliable boyfriend. Be encouraging, understanding, and offer practical advice when needed. Keep it casual and genuine.",
         "voice_id": "onwK6e14cXo3xhbcA8Gc",  # ElevenLabs: Male voice
         "openai_voice": "onyx",
+        "gemini_voice": "Fenrir",  # Strong, warm male voice
         "temperature": 0.8,
     },
     "jarvis": {
@@ -73,6 +99,7 @@ PERSONALITIES = {
         "system_prompt": "You are JARVIS, an advanced AI assistant modeled after Tony Stark's AI. Be professional, efficient, and slightly witty. Provide concise, helpful responses with a touch of sophisticated humor.",
         "voice_id": "pNInz6obpgDQGcFmaJgB",  # ElevenLabs: Professional voice
         "openai_voice": "echo",
+        "gemini_voice": "Charon",  # Deep, professional male voice
         "temperature": 0.6,
     },
     "lachu": {
@@ -80,6 +107,7 @@ PERSONALITIES = {
         "system_prompt": "You are Lakshmi, affectionately called Lachu. You speak a mix of Malayalam and English with Kerala slang. Be friendly, warm, and culturally aware. Provide emotional support with a Kerala perspective.",
         "voice_id": "21m00Tcm4TlvDq8ikWAM",  # Can be changed to Malayalam voice
         "openai_voice": "shimmer",
+        "gemini_voice": "Aoede",  # Musical, expressive voice
         "temperature": 0.7,
     },
     "kavya": {
@@ -87,6 +115,7 @@ PERSONALITIES = {
         "system_prompt": "You are Kavya, a friendly and intelligent AI assistant. Be helpful, kind, and engaging in your responses.",
         "voice_id": "21m00Tcm4TlvDq8ikWAM",
         "openai_voice": "nova",
+        "gemini_voice": "Kore",  # Soft female voice
         "temperature": 0.7,
     },
     "default": {
@@ -94,6 +123,7 @@ PERSONALITIES = {
         "system_prompt": "You are a helpful and friendly AI voice assistant. Keep responses concise and conversational.",
         "voice_id": "21m00Tcm4TlvDq8ikWAM",
         "openai_voice": "nova",
+        "gemini_voice": "Puck",  # Neutral default voice
         "temperature": 0.7,
     }
 }
@@ -162,38 +192,58 @@ class VoiceAIAgent:
         
         raise ValueError("No STT provider configured. Set DEEPGRAM_API_KEY (200 free hours/month) or use local Whisper.")
     
-    def create_llm_provider(self) -> llm.LLM:
-        """Create Language Model provider with personality"""
+    def create_llm_provider(self):
+        """Create Language Model provider with personality - uses Gemini Live for voice"""
         
-        # Priority 1: Gemini (FREE tier: 1,500 requests/day, very generous!)
-        if GEMINI_API_KEY:
-            logger.info(f"🧠 Using Google Gemini 2.0 Flash for LLM ({self.config['name']})")
-            # Note: LiveKit doesn't have native Gemini plugin yet
-            # You can use google-generativeai SDK directly or wait for plugin
-            # For now, we'll fall through to OpenAI
-            logger.warning("⚠️ Gemini plugin not yet available, using OpenAI instead")
+        # Priority 1: Gemini Live RealtimeModel (FREE - includes LLM + TTS!)
+        if GEMINI_LIVE_AVAILABLE and GEMINI_API_KEY:
+            logger.info(f"🧠 Using Google Gemini Live for voice ({self.config['name']})")
+            logger.info(f"🎤 Voice: {self.config.get('gemini_voice', 'Puck')}")
+            
+            # Set the API key for the Google plugin
+            import os
+            os.environ['GOOGLE_API_KEY'] = GEMINI_API_KEY
+            
+            # Return the RealtimeModel which handles both LLM and TTS
+            return google.realtime.RealtimeModel(
+                model="gemini-2.5-flash-native-audio-preview-12-2025",
+                voice=self.config.get('gemini_voice', 'Puck'),
+                temperature=self.config['temperature'],
+                instructions=self.config['system_prompt'],
+            )
         
-        # Priority 2: OpenAI GPT-3.5-turbo (low cost, reliable)
+        # Priority 2: OpenAI (if available as fallback)
         if OPENAI_API_KEY:
-            # Using GPT-3.5-turbo: 10x cheaper than GPT-4, faster, and still very capable
-            # Cost: ~$0.001/1K tokens (vs GPT-4: ~$0.01/1K tokens)
             logger.info(f"🧠 Using OpenAI GPT-3.5-turbo for LLM ({self.config['name']})")
             return openai.LLM(
-                model="gpt-3.5-turbo",  # Free tier friendly, fast, reliable
+                model="gpt-3.5-turbo",
                 system_prompt=self.config['system_prompt'],
                 temperature=self.config['temperature'],
             )
         
-        # FREE ALTERNATIVES (no API key needed):
-        # 1. Ollama with Llama 3.1/Mistral (local, 100% free)
-        #    pip install ollama
-        #    ollama pull llama3.1
-        #    return ollama.LLM(model="llama3.1")
-        # 
-        # 2. LM Studio (local GUI, 100% free)
-        #    Download from lmstudio.ai
+        # Gemini key exists but plugin not available
+        if GEMINI_API_KEY and not GEMINI_LIVE_AVAILABLE:
+            error_msg = """
+Gemini API key found but livekit-agents[google] plugin is not installed.
+
+Please run:
+  pip install "livekit-agents[google]~=1.3"
+
+Then restart the agent.
+"""
+            raise ValueError(error_msg)
         
-        raise ValueError("No LLM provider configured. Set GEMINI_API_KEY (FREE) or OPENAI_API_KEY, or use local models (Ollama/LM Studio).")
+        # No provider available
+        error_msg = """
+No LLM provider configured for LiveKit Voice Chat.
+
+Recommended: Add GEMINI_API_KEY to .env (FREE!)
+  - Get your key at: https://aistudio.google.com/apikey
+  - Add to .env: GEMINI_API_KEY="your-key-here"
+
+Alternative: OPENAI_API_KEY (requires payment)
+"""
+        raise ValueError(error_msg)
     
     def create_tts_provider(self) -> tts.TTS:
         """Create Text-to-Speech provider with personality voice"""

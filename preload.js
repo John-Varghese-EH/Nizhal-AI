@@ -7,7 +7,7 @@ const validChannels = {
     privacy: ['getMode', 'setMode'],
     persona: ['getActive', 'setActive', 'getAll', 'getState', 'updateMood'],
     memory: ['getHistory', 'search', 'addEntry', 'getUserPreferences', 'setUserPreferences'],
-    ai: ['chat', 'setProvider', 'getProviders', 'getProviderStatus', 'checkLocalAI', 'setProviderOrder', 'setFallbackEnabled', 'getModels', 'setModel'],
+    ai: ['chat', 'setProvider', 'getProviders', 'getProviderStatus', 'checkLocalAI', 'setProviderOrder', 'setFallbackEnabled', 'getModels', 'setModel', 'getEphemeralToken'],
     voice: ['speak', 'stop', 'getVoices', 'setVoice'],
     payment: ['checkout', 'verify'],
     license: ['check', 'unlock', 'getUnlocked'],
@@ -21,6 +21,7 @@ const validChannels = {
     avatar: ['speak'],
     app: ['getTheme', 'openExternal', 'getVersion'],
     state: ['get', 'set', 'batch', 'subscribe', 'getPersonalityConfig'],
+    env: ['getAll', 'set', 'delete'],
     navigate: []
 };
 
@@ -61,6 +62,7 @@ contextBridge.exposeInMainWorld('nizhal', {
     onboarding: createSecureApi('onboarding'),
     avatar: createSecureApi('avatar'),
     app: createSecureApi('app'),
+    env: createSecureApi('env'),
 
     // Unified State API
     state: {

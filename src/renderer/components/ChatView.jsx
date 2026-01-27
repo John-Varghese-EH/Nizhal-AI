@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LiveKitVoiceButton } from './LiveKitVoiceButton';
-import { LiveKitVideoPreview } from './LiveKitVideoPreview';
+
 
 const ChatView = ({ persona, personalityState }) => {
     const [messages, setMessages] = useState([]);
@@ -308,15 +308,7 @@ ${voiceStatus === 'connected' ? '✅ LiveKit connected' : '⚠️ LiveKit not co
                     onCameraToggle={setCameraEnabled}
                 />
 
-                {/* Camera Preview (only when voice connected) */}
-                {voiceStatus === 'connected' && livekitRoom && (
-                    <LiveKitVideoPreview
-                        room={livekitRoom}
-                        enabled={cameraEnabled}
-                        onToggle={(enabled) => setCameraEnabled(enabled)}
-                        hideControls={true}
-                    />
-                )}
+
             </div>
 
             <form onSubmit={handleSubmit} className="p-4 border-t border-white/5">

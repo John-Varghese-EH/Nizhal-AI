@@ -4,55 +4,69 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { LiveKitVoiceService } from '../services/LiveKitVoiceService';
+import { livekitVoiceService } from '../services/LiveKitVoiceService';
 
 export function LiveKitVoiceButton({ userName = 'User', onStatusChange, onRoomConnected, cameraEnabled, onCameraToggle }) {
     const [status, setStatus] = useState('disconnected'); // disconnected, connecting, connected
     const [muted, setMuted] = useState(false);
     const [agentSpeaking, setAgentSpeaking] = useState(false);
-    const voiceServiceRef = useRef(null);
+    const voiceServiceRef = useRef(livekitVoiceService);
 
     useEffect(() => {
-        // Initialize voice service
-        if (!voiceServiceRef.current) {
-            const service = new LiveKitVoiceService();
+        // Use singleton service
+        const service = livekitVoiceService;
 
-            // Setup callbacks
-            service.onConnected = () => {
-                setStatus('connected');
-                if (onStatusChange) onStatusChange('connected');
-                // Pass room to parent for camera integration
-                if (onRoomConnected && service.room) {
-                    onRoomConnected(service.room);
-                }
-            };
-
-            service.onDisconnected = (reason) => {
-                setStatus('disconnected');
-                if (onStatusChange) onStatusChange('disconnected');
-                console.log('Disconnected:', reason);
-            };
-
-            service.onAgentSpeaking = (speaking) => {
-                setAgentSpeaking(speaking);
-            };
-
-            service.onError = (error) => {
-                console.error('LiveKit error:', error);
-                setStatus('disconnected');
-                if (onStatusChange) onStatusChange('error');
-            };
-
-            voiceServiceRef.current = service;
-        }
-
-        return () => {
-            // Cleanup on unmount
-            if (voiceServiceRef.current) {
-                voiceServiceRef.current.disconnect();
+        // Setup callbacks
+        service.onConnected = () => {
+            setStatus('connected');
+            if (onStatusChange) onStatusChange('connected');
+            // Pass room to parent for camera integration
+            if (onRoomConnected && service.room) {
+                onRoomConnected(service.room);
             }
         };
-    }, [onStatusChange, onRoomConnected]);
+
+        service.onDisconnected = (reason) => {
+            setStatus('disconnected');
+            if (onStatusChange) onStatusChange('disconnected');
+            console.log('Disconnected:', reason);
+        };
+
+        service.onAgentSpeaking = (speaking) => {
+            setAgentSpeaking(speaking);
+        };
+
+        service.onError = (error) => {
+            console.error('LiveKit error:', error);
+            // Don't set to disconnected for "Client initiated disconnect" - this is expected during cleanup
+            if (!error.message?.includes('Client initiated disconnect')) {
+                setStatus('disconnected');
+                if (onStatusChange) onStatusChange('error');
+            }
+        };
+
+        // Sync initial state if already connected
+        if (service.isConnected) {
+            setStatus('connected');
+            setMuted(service.isMuted);
+            if (onRoomConnected && service.room) {
+                onRoomConnected(service.room);
+            }
+        }
+
+        // Cleanup only on actual component unmount
+        return () => {
+            // We DON'T disconnect here anymore if we want persistent voice across tabs,
+            // but preserving original behavior for now:
+            const service = livekitVoiceService;
+            if (service && service.isConnected) {
+                // For now, let's keep it behaving as before (disconnect on unmount)
+                // Or actually, if we want camera to persist, maybe we should NOT disconnect?
+                // But sticking to minimal changes implies keeping it.
+                service.disconnect();
+            }
+        };
+    }, []); // Empty deps - only run once on mount/unmount
 
     const handleConnect = async () => {
         setStatus('connecting');

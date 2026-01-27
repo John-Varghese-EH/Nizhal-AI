@@ -65,6 +65,10 @@ export class MultiWindowManager {
         // Character window specific settings
         this.characterWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
+        // Enable click-through on transparent pixels
+        // This allows clicks to pass through empty areas but still interact with the character
+        this.characterWindow.setIgnoreMouseEvents(true, { forward: true });
+
         // Load character view
         if (this.isDev) {
             await this.characterWindow.loadURL('http://localhost:5173/character.html');
@@ -84,6 +88,22 @@ export class MultiWindowManager {
         });
 
         return this.characterWindow;
+    }
+
+    /**
+     * Toggle click-through mode for character window
+     * @param {boolean} ignore - If true, enables click-through
+     */
+    setCharacterClickThrough(ignore) {
+        if (this.characterWindow) {
+            if (ignore) {
+                // Enable click-through with forwarding (clicks pass through transparent areas)
+                this.characterWindow.setIgnoreMouseEvents(true, { forward: true });
+            } else {
+                // Disable click-through (window captures all clicks)
+                this.characterWindow.setIgnoreMouseEvents(false);
+            }
+        }
     }
 
     /**
