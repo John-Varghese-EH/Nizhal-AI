@@ -1,5 +1,5 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 console.log("Installing Hacker Extensions...");
 
@@ -13,8 +13,17 @@ const extensions = [
 let installed = 0;
 
 extensions.forEach(ext => {
-    const extPath = path.join(process.cwd(), ext.path);
-    if (fs.existsSync(extPath)) {
+    // FIX: Prevent path traversal by validating the resolved path is within the project root
+    const baseDir = process.cwd();
+    const resolvedPath = path.resolve(baseDir, ext.path);
+
+    // Ensure the path starts with the base directory
+    if (!resolvedPath.startsWith(baseDir)) {
+        console.log(`[SECURITY] Blocked unsafe path for ${ext.name}: ${ext.path}`);
+        return;
+    }
+
+    if (fs.existsSync(resolvedPath)) {
         console.log(`[INSTALLED] ${ext.name} ✅`);
         installed++;
     } else {

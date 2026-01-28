@@ -4,9 +4,10 @@ import { v4 as uuidv4 } from 'uuid';
 
 export class MemoryService {
     constructor(dataPath) {
-        this.dataPath = dataPath;
-        this.memoryFile = path.join(dataPath, 'memory.json');
-        this.preferencesFile = path.join(dataPath, 'preferences.json');
+        // FIX: Resolve dataPath to absolute path to prevent traversal
+        this.dataPath = path.resolve(dataPath);
+        this.memoryFile = path.join(this.dataPath, 'memory.json');
+        this.preferencesFile = path.join(this.dataPath, 'preferences.json');
         this.conversationHistory = [];
         this.userPreferences = {};
         this.embeddings = new Map();

@@ -380,17 +380,37 @@ function updateParticipantsList() {
     const participants = Array.from(room.remoteParticipants.values());
     participants.push(room.localParticipant);
 
+    elements.participantsList.innerHTML = ''; // Clear current list
+
     if (participants.length === 0) {
-        elements.participantsList.innerHTML = '<p class="empty-state">No participants yet</p>';
+        const p = document.createElement('p');
+        p.className = 'empty-state';
+        p.textContent = 'No participants yet';
+        elements.participantsList.appendChild(p);
         return;
     }
 
-    elements.participantsList.innerHTML = participants.map(p => `
-        <div class="participant-item ${p.sid === room.localParticipant.sid ? 'local' : ''}">
-            <span class="participant-name">${p.identity} ${p.sid === room.localParticipant.sid ? '(You)' : ''}</span>
-            <span class="participant-status ${p.connectionQuality}">${p.connectionQuality || 'unknown'}</span>
-        </div>
-    `).join('');
+    const fragment = document.createDocumentFragment();
+
+    participants.forEach(p => {
+        const div = document.createElement('div');
+        div.className = `participant-item ${p.sid === room.localParticipant.sid ? 'local' : ''}`;
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'participant-name';
+        // FIX: Use textContent to prevent XSS from malicious names
+        nameSpan.textContent = `${p.identity} ${p.sid === room.localParticipant.sid ? '(You)' : ''}`;
+
+        const statusSpan = document.createElement('span');
+        statusSpan.className = `participant-status ${p.connectionQuality}`;
+        statusSpan.textContent = p.connectionQuality || 'unknown';
+
+        div.appendChild(nameSpan);
+        div.appendChild(statusSpan);
+        fragment.appendChild(div);
+    });
+
+    elements.participantsList.appendChild(fragment);
 }
 
 /**

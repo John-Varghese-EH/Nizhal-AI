@@ -40,9 +40,9 @@ export class AIService {
 
         // Gemini model fallback order (when quota exceeded)
         this.geminiModelFallback = [
-            'gemini-2.0-flash',     // Primary - fast, newest
-            'gemini-1.5-flash',     // Fallback - stable
-            'gemini-1.5-pro'        // Last resort - more quota headroom
+            'gemini-1.5-flash',     // Primary - stable, higher limits
+            'gemini-2.0-flash',     // Secondary - experimental
+            'gemini-1.5-pro'        // Last resort
         ];
         this.currentGeminiModel = 0; // Index into fallback array
 
@@ -61,8 +61,8 @@ export class AIService {
 
         // Gemini Free Tier Limits (Requests Per Minute)
         this.geminiModelLimits = {
-            'gemini-2.0-flash': 15,
             'gemini-1.5-flash': 15,
+            'gemini-2.0-flash': 10, // Lower limit for experimental
             'gemini-1.5-flash-8b': 15,
             'gemini-1.5-pro': 2    // Very strict limit for Pro
         };
@@ -115,7 +115,7 @@ export class AIService {
                 enabled: true
             },
             gemini: {
-                model: 'gemini-2.0-flash',
+                model: 'gemini-1.5-flash',
                 apiKey: '',
                 enabled: true
             },

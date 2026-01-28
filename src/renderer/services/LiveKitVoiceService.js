@@ -24,6 +24,7 @@ export class LiveKitVoiceService {
         this.onDisconnected = null;
         this.onSpeakingChanged = null;
         this.onAgentSpeaking = null;
+        this.onEmotion = null;
         this.onError = null;
 
         console.log('[LiveKitVoice] Service initialized');
@@ -159,6 +160,30 @@ export class LiveKitVoiceService {
         // Connection state changed
         this.room.on(RoomEvent.ConnectionStateChanged, (state) => {
             console.log('[LiveKitVoice] Connection state:', state);
+        });
+
+        // Data received (Emotion / State)
+        this.room.on(RoomEvent.DataReceived, (payload, participant, kind, topic) => {
+            try {
+                const decoder = new TextDecoder();
+                const strData = decoder.decode(payload);
+                const data = JSON.parse(strData);
+
+                console.log('[LiveKitVoice] Data received:', data);
+
+                if (data.type === 'emotion') {
+                    if (this.onEmotion) {
+                        this.onEmotion(data.emotion);
+                    }
+                } else if (data.type === 'state') {
+                    if (this.onAgentSpeaking && data.isSpeaking !== undefined) {
+                        // We still use audio track detection as primary, but this is a good backup/sync
+                        // this.onAgentSpeaking(data.isSpeaking);
+                    }
+                }
+            } catch (error) {
+                console.error('[LiveKitVoice] Failed to parse data:', error);
+            }
         });
 
         // Reconnecting

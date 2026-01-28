@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LiveKitVoiceButton } from './LiveKitVoiceButton';
-
-
+import { livekitVoiceService } from '../services/LiveKitVoiceService';
 const ChatView = ({ persona, personalityState }) => {
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
@@ -11,6 +10,7 @@ const ChatView = ({ persona, personalityState }) => {
     const [voiceStatus, setVoiceStatus] = useState('disconnected');
     const [cameraEnabled, setCameraEnabled] = useState(false);
     const [livekitRoom, setLivekitRoom] = useState(null);
+    const [liveKitEmotion, setLiveKitEmotion] = useState(null);
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
 
@@ -22,6 +22,19 @@ const ChatView = ({ persona, personalityState }) => {
             window.nizhalAI.voiceManager.setLivekitStatus(connected);
             console.log('[ChatView] LiveKit status synced:', connected);
         }
+
+        // Subscribe to real-time emotion updates from voice agent
+        livekitVoiceService.onEmotion = (emotion) => {
+            console.log('[ChatView] Received emotion from voice:', emotion);
+            setLiveKitEmotion(emotion);
+
+            // Reset after 5 seconds
+            setTimeout(() => setLiveKitEmotion(null), 5000);
+        };
+
+        return () => {
+            livekitVoiceService.onEmotion = null;
+        };
     }, [voiceStatus]);
 
     useEffect(() => {
@@ -221,7 +234,8 @@ ${voiceStatus === 'connected' ? '✅ LiveKit connected' : '⚠️ LiveKit not co
             playful: '😄',
             thoughtful: '🤔'
         };
-        return moods[personalityState?.mood] || '🤖';
+        const activeMood = liveKitEmotion || personalityState?.mood || 'neutral';
+        return moods[activeMood] || '🤖';
     };
 
     return (

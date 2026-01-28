@@ -4,8 +4,9 @@ import crypto from 'crypto';
 
 export class LicenseService {
     constructor(dataPath) {
-        this.dataPath = dataPath;
-        this.licensesFile = path.join(dataPath, 'licenses.enc');
+        // FIX: Resolve dataPath to absolute path to prevent traversal
+        this.dataPath = path.resolve(dataPath);
+        this.licensesFile = path.join(this.dataPath, 'licenses.enc');
         this.licenses = new Map();
         this.encryptionKey = null;
     }

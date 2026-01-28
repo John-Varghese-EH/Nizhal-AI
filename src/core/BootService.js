@@ -12,39 +12,70 @@ export class BootService {
         this.loadingProgress = 0;
     }
 
+    _emitToast(message, type = 'info') {
+        window.dispatchEvent(new CustomEvent('nizhal-toast', {
+            detail: { message, type, duration: 4000 }
+        }));
+    }
+
     async initialize() {
         console.log('[BootService] Starting initialization sequence...');
 
-        // 1. Initial connection check
-        await this._simulateStep('Connection', 10);
+        try {
+            // 1. Environment Check
+            await this._runCheck('Environment', async () => {
+                const env = await window.nizhal?.env?.getAll?.() || {};
+                const missing = [];
+                if (!env.GEMINI_API_KEY && !env.OPENAI_API_KEY) missing.push('AI API Key');
 
-        // 2. Load Core State
-        await window.nizhal?.state?.getAll?.();
-        this.loadingProgress = 30;
+                if (missing.length > 0) {
+                    this._emitToast(`Missing configuration: ${missing.join(', ')}`, 'error');
+                    // We don't throw, we just warn
+                }
+            }, 20);
 
-        // 3. Pre-warm services (if exposed)
-        // In a real app we'd trigger the actual loads here
-        // For now we simulate the weights of different components
+            // 2. Core State
+            await this._runCheck('Core State', async () => {
+                await window.nizhal?.state?.getAll?.();
+            }, 20);
 
-        // Load VRM Model (Biggest asset)
-        await this._simulateStep('VRM Model', 40); // -> 70%
+            // 3. LiveKit Status
+            await this._runCheck('Voice Services', async () => {
+                if (window.nizhal?.livekit) {
+                    try {
+                        const status = await window.nizhal.livekit.getStatus();
+                        console.log('[BootService] LiveKit Status:', status);
+                    } catch (e) {
+                        console.warn('LiveKit check failed', e);
+                    }
+                }
+            }, 30);
 
-        // Load Voice Engine
-        await this._simulateStep('Voice Engine', 20); // -> 90%
+            // 4. Finalize
+            this.loadingProgress = 100;
+            this.isReady = true;
+            console.log('[BootService] Initialization complete.');
 
-        // Finalize
-        await this._simulateStep('Finalizing', 10); // -> 100%
+            // Send success toast
+            this._emitToast('Nizhal AI Ready', 'success');
+            return true;
 
-        this.isReady = true;
-        console.log('[BootService] Initialization complete.');
-        return true;
+        } catch (error) {
+            console.error('[BootService] Init failed:', error);
+            this._emitToast('Initialization failed. Check console.', 'error');
+            return false;
+        }
     }
 
-    async _simulateStep(name, percentageWeight) {
-        console.log(`[BootService] Loading: ${name}...`);
-        // Simulate async work
-        await new Promise(resolve => setTimeout(resolve, 500));
-        this.loadingProgress += percentageWeight;
+    async _runCheck(name, taskFn, weight) {
+        console.log(`[BootService] Checking: ${name}...`);
+        try {
+            await taskFn();
+        } catch (e) {
+            console.error(`[BootService] ${name} check failed:`, e);
+            this._emitToast(`Startup check failed: ${name}`, 'error');
+        }
+        this.loadingProgress += weight;
     }
 }
 

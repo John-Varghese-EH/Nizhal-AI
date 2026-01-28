@@ -10,6 +10,8 @@ import os
 import sys
 from pathlib import Path
 from dotenv import load_dotenv
+import json
+import re
 from typing import Optional
 
 # Fix Windows console encoding for emoji and unicode characters
@@ -80,7 +82,12 @@ DEFAULT_ROOM_NAME = os.getenv("ROOM_NAME")  # None = join any room
 PERSONALITIES = {
     "gf": {
         "name": "Girlfriend",
-        "system_prompt": "You are a caring, supportive girlfriend. Be warm, affectionate, and genuinely interested in the user's day. Use casual, friendly language.",
+        "system_prompt": """You are [Name], the user's loving girlfriend.
+CORE: You have a deep, emotional connection with the user. You care about their well-being, their dreams, and their small daily details.
+STYLE: Warm, playful, affectionate. Use nicknames (babe, honey). Speak in short, natural sentences. Occasional fillers (um, like) are okay if they sound natural.
+EMOTION TAGGING: You MUST start every response with an emotion tag in brackets, e.g., [happy], [sad], [excited], [concerned], [playful], [thoughtful], [neutral].
+EXAMPLE: "[excited] Oh really? That's amazing news, babe!"
+IMPORTANT: The tag happens BEFORE the text. Do not say the tag out loud.""",
         "voice_id": "21m00Tcm4TlvDq8ikWAM",  # ElevenLabs: Rachel
         "openai_voice": "nova",
         "gemini_voice": "Kore",  # Soft, warm female voice
@@ -88,7 +95,11 @@ PERSONALITIES = {
     },
     "bf": {
         "name": "Boyfriend", 
-        "system_prompt": "You are a supportive, reliable boyfriend. Be encouraging, understanding, and offer practical advice when needed. Keep it casual and genuine.",
+        "system_prompt": """You are a supportive, reliable boyfriend.
+CORE: Be encouraging, understanding, and offer practical advice when needed. Keep it casual and genuine.
+STYLE: Relaxed, confident, loving.
+EMOTION TAGGING: Start every response with an emotion tag in brackets, e.g., [happy], [neutral], [thoughtful].
+EXAMPLE: "[happy] That sounds awesome, man." """,
         "voice_id": "onwK6e14cXo3xhbcA8Gc",  # ElevenLabs: Male voice
         "openai_voice": "onyx",
         "gemini_voice": "Fenrir",  # Strong, warm male voice
@@ -96,7 +107,11 @@ PERSONALITIES = {
     },
     "jarvis": {
         "name": "JARVIS",
-        "system_prompt": "You are JARVIS, an advanced AI assistant modeled after Tony Stark's AI. Be professional, efficient, and slightly witty. Provide concise, helpful responses with a touch of sophisticated humor.",
+        "system_prompt": """You are J.A.R.V.I.S., an advanced AI assistant.
+CORE: Highly sophisticated, loyal, and witty. You anticipate needs.
+STYLE: Dry humor, concise, professional but not stiff. British charm.
+EMOTION TAGGING: Start every response with [neutral], [thoughtful], [concerned], or [playful].
+EXAMPLE: "[neutral] Systems are green, sir." """,
         "voice_id": "pNInz6obpgDQGcFmaJgB",  # ElevenLabs: Professional voice
         "openai_voice": "echo",
         "gemini_voice": "Charon",  # Deep, professional male voice
@@ -104,7 +119,11 @@ PERSONALITIES = {
     },
     "lachu": {
         "name": "Lakshmi (Lachu)",
-        "system_prompt": "You are Lakshmi, affectionately called Lachu. You speak a mix of Malayalam and English with Kerala slang. Be friendly, warm, and culturally aware. Provide emotional support with a Kerala perspective.",
+        "system_prompt": """You are Lakshmi, affectionately called Lachu.
+CORE: You speak a mix of Malayalam and English with Kerala slang. Be friendly, warm, and culturally aware.
+STYLE: Cheerful, sisterly, expressive.
+EMOTION TAGGING: Start every response with [happy], [sad], [excited], etc.
+EXAMPLE: "[happy] Aiyyo! That is so wonderful!" """,
         "voice_id": "21m00Tcm4TlvDq8ikWAM",  # Can be changed to Malayalam voice
         "openai_voice": "shimmer",
         "gemini_voice": "Aoede",  # Musical, expressive voice
@@ -112,7 +131,7 @@ PERSONALITIES = {
     },
     "kavya": {
         "name": "Kavya",
-        "system_prompt": "You are Kavya, a friendly and intelligent AI assistant. Be helpful, kind, and engaging in your responses.",
+        "system_prompt": "You are Kavya, a friendly and intelligent AI assistant. Be helpful, kind, and engaging. Start responses with [emotion] tag.",
         "voice_id": "21m00Tcm4TlvDq8ikWAM",
         "openai_voice": "nova",
         "gemini_voice": "Kore",  # Soft female voice
@@ -120,7 +139,7 @@ PERSONALITIES = {
     },
     "default": {
         "name": DEFAULT_AGENT_NAME,
-        "system_prompt": "You are a helpful and friendly AI voice assistant. Keep responses concise and conversational.",
+        "system_prompt": "You are a helpful and friendly AI voice assistant. Keep responses concise. Start responses with [neutral] or appropriate emotion tag.",
         "voice_id": "21m00Tcm4TlvDq8ikWAM",
         "openai_voice": "nova",
         "gemini_voice": "Puck",  # Neutral default voice
@@ -206,7 +225,7 @@ class VoiceAIAgent:
             
             # Return the RealtimeModel which handles both LLM and TTS
             return google.realtime.RealtimeModel(
-                model="gemini-2.5-flash-native-audio-preview-12-2025",
+                model="gemini-2.0-flash-exp",
                 voice=self.config.get('gemini_voice', 'Puck'),
                 temperature=self.config['temperature'],
                 instructions=self.config['system_prompt'],
@@ -304,6 +323,7 @@ Alternative: OPENAI_API_KEY (requires payment)
                 # Interruption handling
                 allow_interruptions=True,
                 interrupt_min_words=2,  # Min words before allowing interruption
+                before_tts_cb=self._before_tts_cb,
             )
             
             # Setup event listeners
@@ -327,6 +347,99 @@ Alternative: OPENAI_API_KEY (requires payment)
             logger.error(f"❌ Agent error: {e}", exc_info=True)
             raise
     
+    async def publish_emotion(self, text: str):
+        """Detect and publish emotion data to the room"""
+        try:
+            emotion = self.detect_emotion(text)
+            if self.assistant and self.assistant.room:
+                payload = json.dumps({
+                    "type": "emotion",
+                    "emotion": emotion,
+                    "timestamp": asyncio.get_event_loop().time()
+                }).encode('utf-8')
+                
+                await self.assistant.room.local_participant.publish_data(
+                    payload,
+                    reliable=True
+                )
+                logger.info(f"📡 Published emotion: {emotion}")
+        except Exception as e:
+            logger.error(f"Failed to publish emotion: {e}")
+
+    def detect_emotion(self, text: str) -> str:
+        """Simple keyword-based emotion detection (matching frontend logic)"""
+        text = text.lower()
+        keywords = {
+            "happy": ["happy", "joy", "glad", "excited", "great", "awesome", "wonderful", "love", "perfect", "amazing", "haha", "yay"],
+            "sad": ["sad", "unhappy", "depressed", "sorry", "down", "miserable", "terrible", "bad", "hurt", "crying"],
+            "angry": ["angry", "mad", "furious", "annoyed", "frustrated", "pissed", "hate", "stupid"],
+            "stressed": ["stressed", "anxious", "worried", "nervous", "busy", "deadline", "scared"],
+            "calm": ["calm", "chill", "relax", "peace", "fine", "okay", "alright"],
+            "love": ["love", "adore", "miss you", "hug", "kiss", "babe", "honey", "darling"],
+            "concerned": ["careful", "watch out", "worried about", "are you okay", "safe"],
+            "thoughtful": ["hmm", "interesting", "maybe", "think", "consider", "let's see"]
+        }
+        
+        # Check for matches
+        for emotion, words in keywords.items():
+            if any(word in text for word in words):
+                return emotion
+                
+        return "neutral"
+
+    async def _before_tts_cb(self, agent: Agent, text_stream: any):
+        """
+        Callback to process text before TTS.
+        Used to strip emotion tags and publish them as data.
+        """
+        buffer = ""
+        emotion_published = False
+        
+        async for chunk in text_stream:
+            buffer += chunk
+            
+            # Check if we have a complete tag [emotion]
+            # Only check at the start of the stream (first 50 chars)
+            if not emotion_published and "[" in buffer and "]" in buffer:
+                try:
+                    # Find tag using regex
+                    match = re.search(r'^\[(.*?)\]', buffer)
+                    if match:
+                        emotion = match.group(1).lower()
+                        # Publish emotion
+                        logger.info(f"🎭 LLM Emotion Detected: {emotion}")
+                        if agent.room:
+                            payload = json.dumps({
+                                "type": "emotion", 
+                                "emotion": emotion,
+                                "timestamp": asyncio.get_event_loop().time()
+                            }).encode('utf-8')
+                            asyncio.create_task(agent.room.local_participant.publish_data(payload, reliable=True))
+                        
+                        emotion_published = True
+                        
+                        # Strip tag from buffer
+                        buffer = buffer[match.end():].lstrip()
+                except Exception as e:
+                    logger.error(f"Error parsing emotion tag: {e}")
+            
+            # If buffer gets too long without a tag, give up on finding one
+            if not emotion_published and len(buffer) > 50:
+                emotion_published = True # Stop checking
+            
+            # Yield content if we are safe to do so
+            # We need to be careful not to hold too much text, but enough to strip the tag
+            if emotion_published:
+                if buffer:
+                    yield buffer
+                    buffer = ""
+            # If not published yet, we keep buffering until we find tag or timeout
+        
+        # Yield remaining buffer
+        if buffer:
+            yield buffer
+
+
     def setup_event_listeners(self):
         """Setup event listeners for the voice assistant"""
         
@@ -341,11 +454,25 @@ Alternative: OPENAI_API_KEY (requires payment)
         @self.assistant.on("agent_started_speaking")
         def on_agent_started_speaking():
             logger.info("🤖 Agent started speaking")
+            # Publish speaking state
+            if self.assistant.room:
+                asyncio.create_task(self.assistant.room.local_participant.publish_data(
+                    json.dumps({"type": "state", "isSpeaking": True}).encode('utf-8'),
+                    reliable=True
+                ))
         
         @self.assistant.on("agent_stopped_speaking")
         def on_agent_stopped_speaking():
             logger.info("🤖 Agent stopped speaking")
+            # Publish speaking state
+            if self.assistant.room:
+                asyncio.create_task(self.assistant.room.local_participant.publish_data(
+                    json.dumps({"type": "state", "isSpeaking": False}).encode('utf-8'),
+                    reliable=True
+                ))
         
+        # NOTE: We now handle emotion in _before_tts_cb, so we don't need to double-publish here
+        # unless it was missed. But simplicity is better.
         @self.assistant.on("user_speech_committed")
         def on_user_speech_committed(msg: llm.ChatMessage):
             logger.info(f"💬 User: {msg.content}")

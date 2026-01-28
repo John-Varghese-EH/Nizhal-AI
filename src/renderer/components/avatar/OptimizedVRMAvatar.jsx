@@ -208,7 +208,7 @@ const OptimizedVRMModel = ({
                     [AvatarState.IDLE]: 'idle',
                     [AvatarState.SPEAKING]: 'speaking',
                     [AvatarState.DANCING]: 'dancing',
-                    [AvatarState.SLEEPING]: 'sleeping',
+                    [AvatarState.SLEEPING]: 'idle', // Fixed: Use idle to keep upright (eyes will still close)
                     [AvatarState.DRAGGING]: 'dragging',
                     [AvatarState.SITTING_TASKBAR]: 'sitting',
                     [AvatarState.SITTING_WINDOW]: 'sitting',

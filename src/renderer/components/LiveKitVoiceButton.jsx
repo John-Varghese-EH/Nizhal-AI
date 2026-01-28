@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { livekitVoiceService } from '../services/LiveKitVoiceService';
+import { useToast } from '../contexts/ToastContext';
 
 export function LiveKitVoiceButton({ userName = 'User', onStatusChange, onRoomConnected, cameraEnabled, onCameraToggle }) {
     const [status, setStatus] = useState('disconnected'); // disconnected, connecting, connected
@@ -68,6 +69,8 @@ export function LiveKitVoiceButton({ userName = 'User', onStatusChange, onRoomCo
         };
     }, []); // Empty deps - only run once on mount/unmount
 
+    const { error: toastError } = useToast();
+
     const handleConnect = async () => {
         setStatus('connecting');
 
@@ -90,7 +93,7 @@ export function LiveKitVoiceButton({ userName = 'User', onStatusChange, onRoomCo
         } catch (error) {
             console.error('Connection failed:', error);
             setStatus('disconnected');
-            alert(`Voice connection failed: ${error.message}`);
+            toastError(`Voice connection failed: ${error.message}`);
         }
     };
 

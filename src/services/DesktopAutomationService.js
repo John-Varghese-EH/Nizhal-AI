@@ -184,12 +184,13 @@ class DesktopAutomationService {
                 appPath = this.appPaths[`${knownAppKey}_mac`];
             }
 
+            // FIX: Use spawn instead of exec to prevent command injection
             if (this.isWindows) {
-                spawn(appPath, [], { detached: true, stdio: 'ignore' });
+                spawn(appPath, [], { detached: true, stdio: 'ignore' }).unref();
             } else if (this.isMac) {
-                exec(`open "${appPath}"`);
+                spawn('open', [appPath], { detached: true, stdio: 'ignore' }).unref();
             } else if (this.isLinux) {
-                spawn(appPath, [], { detached: true, stdio: 'ignore' });
+                spawn(appPath, [], { detached: true, stdio: 'ignore' }).unref();
             }
 
             return { success: true, app: appName };
@@ -204,15 +205,31 @@ class DesktopAutomationService {
      */
     async closeApp(appName) {
         try {
-            if (this.isWindows) {
-                await execAsync(`taskkill /IM "${appName}.exe" /F`);
-            } else if (this.isMac) {
-                await execAsync(`killall "${appName}"`);
-            } else if (this.isLinux) {
-                await execAsync(`pkill -f "${appName}"`);
-            }
+            // FIX: Use spawn instead of execAsync to prevent command injection
+            return new Promise((resolve, reject) => {
+                let proc;
+                if (this.isWindows) {
+                    // Safe arguments array implies NO shell injection
+                    proc = spawn('taskkill', ['/IM', `${appName}.exe`, '/F']);
+                } else if (this.isMac) {
+                    proc = spawn('killall', [appName]);
+                } else if (this.isLinux) {
+                    proc = spawn('pkill', ['-f', appName]);
+                }
 
-            return { success: true, app: appName };
+                if (!proc) {
+                    return reject(new Error('Unsupported platform'));
+                }
+
+                proc.on('close', (code) => {
+                    if (code === 0) resolve({ success: true, app: appName });
+                    else resolve({ success: false, error: `Process exited with code ${code}` }); // specific behavior for closeApp failure is usually just ignoring
+                });
+
+                proc.on('error', (err) => {
+                    resolve({ success: false, error: err.message });
+                });
+            });
         } catch (error) {
             console.error('[DesktopAutomation] Close app failed:', error);
             return { success: false, error: error.message };

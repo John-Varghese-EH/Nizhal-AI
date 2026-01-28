@@ -5,6 +5,7 @@ import LegalDocumentViewer from './LegalDocumentViewer';
 import { Key, Eye, EyeOff, Lock, Plus, Trash2, Edit2, Save, X } from 'lucide-react';
 
 const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacyToggle, isModal = false, userProfile, onProfileChange }) => {
+    const toast = useToast(); // Hook usage
     const [preferences, setPreferences] = useState({});
     const [personas, setPersonas] = useState([]);
     const [activePersonaId, setActivePersonaId] = useState('jarvis');
@@ -960,6 +961,34 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
                                             </svg>
                                         </div>
                                     </motion.button>
+                                </div>
+
+                                {/* Troubleshooting */}
+                                <div className="space-y-3 border-t border-white/5 pt-4">
+                                    <h3 className="text-sm font-medium text-white/70">Troubleshooting</h3>
+                                    <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <div className="text-sm font-medium text-white">Restart Voice Agent</div>
+                                                <div className="text-xs text-white/50">Fix connection or audio issues</div>
+                                            </div>
+                                            <motion.button
+                                                whileTap={{ scale: 0.95 }}
+                                                onClick={async () => {
+                                                    try {
+                                                        const { success, error } = toast;
+                                                        await window.nizhal?.livekit?.restartAgent?.();
+                                                        success('Voice Agent restart triggered');
+                                                    } catch (err) {
+                                                        console.error(err);
+                                                    }
+                                                }}
+                                                className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs text-white flex items-center gap-1.5"
+                                            >
+                                                <RefreshCw size={14} /> Restart
+                                            </motion.button>
+                                        </div>
+                                    </div>
                                 </div>
                             </motion.div>
                         )}

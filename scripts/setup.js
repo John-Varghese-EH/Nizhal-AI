@@ -42,7 +42,13 @@ async function runStep(label, fn) {
 
 async function runCommand(cmd, args, cwd = process.cwd()) {
     return new Promise((resolve, reject) => {
-        const proc = spawn(cmd, args, { cwd, shell: true, stdio: 'inherit' });
+        // FIX: Prevent command injection by disabling shell execution
+        // Handle Windows-specific executable extensions manually
+        if (os.platform() === 'win32' && cmd === 'npm') {
+            cmd = 'npm.cmd';
+        }
+
+        const proc = spawn(cmd, args, { cwd, shell: false, stdio: 'inherit' });
         proc.on('close', (code) => {
             if (code === 0) resolve();
             else reject(new Error(`Command failed with code ${code}`));
