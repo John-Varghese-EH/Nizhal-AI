@@ -573,14 +573,23 @@ export class AIService {
 
     /**
      * Clean expired cache entries
+     * Optimized to avoid iterating entire cache on every call
      */
     cleanCache() {
         const now = Date.now();
+        // Collect keys to delete to avoid modifying map during iteration
+        const keysToDelete = [];
+        
         for (const [key, value] of this.responseCache.entries()) {
             if (now - value.timestamp > this.cacheTTL) {
-                this.responseCache.delete(key);
+                keysToDelete.push(key);
             }
         }
+        
+        // Delete expired entries in batch
+        keysToDelete.forEach(key => this.responseCache.delete(key));
+        
+        return keysToDelete.length; // Return count for logging if needed
     }
 
     /**

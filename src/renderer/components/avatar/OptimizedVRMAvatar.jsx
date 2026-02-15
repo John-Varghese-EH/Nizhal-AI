@@ -31,8 +31,9 @@ const loadVRMDeps = async () => {
 
 /**
  * OptimizedVRMModel - Resource-efficient VRM renderer
+ * Memoized to prevent unnecessary re-renders
  */
-const OptimizedVRMModel = ({
+const OptimizedVRMModel = React.memo(({
     url,
     scale = 1,
     position = [0, 0, 0],
@@ -354,12 +355,13 @@ const OptimizedVRMModel = ({
             onPointerMove={handlePointerMove}
         />
     );
-};
+});
 
 /**
  * OptimizedVRMAvatar - Full avatar component with Canvas
+ * Memoized to prevent unnecessary re-renders
  */
-const OptimizedVRMAvatar = ({
+const OptimizedVRMAvatar = React.memo(({
     modelUrl,
     size = { width: 200, height: 300 },
     expression = 'neutral',
@@ -439,7 +441,7 @@ const OptimizedVRMAvatar = ({
             )}
         </div>
     );
-};
+});
 
 // Export both: default is full component with Canvas, named is just the model
 export { OptimizedVRMModel };

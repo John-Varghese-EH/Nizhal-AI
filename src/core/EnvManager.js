@@ -14,13 +14,13 @@ export class EnvManager {
      * Get all environment variables from .env file
      * Returns object with key-value pairs
      */
-    getAll() {
+    async getAll() {
         if (!fs.existsSync(this.envPath)) {
             return {};
         }
 
         try {
-            const content = fs.readFileSync(this.envPath, 'utf8');
+            const content = await fs.promises.readFile(this.envPath, 'utf8');
             const lines = content.split('\n');
             const env = {};
 
@@ -63,11 +63,11 @@ export class EnvManager {
      * Set a single environment variable
      * updates existing line or appends new one
      */
-    set(key, value) {
+    async set(key, value) {
         try {
             let content = '';
             if (fs.existsSync(this.envPath)) {
-                content = fs.readFileSync(this.envPath, 'utf8');
+                content = await fs.promises.readFile(this.envPath, 'utf8');
             }
 
             const lines = content.split(/\r?\n/);
@@ -92,7 +92,7 @@ export class EnvManager {
                 newLines.push(`${key}="${safeValue}"`);
             }
 
-            fs.writeFileSync(this.envPath, newLines.join('\n'), 'utf8');
+            await fs.promises.writeFile(this.envPath, newLines.join('\n'), 'utf8');
             return true;
         } catch (error) {
             console.error('[EnvManager] Failed to write .env:', error);
@@ -103,11 +103,11 @@ export class EnvManager {
     /**
      * Delete an environment variable
      */
-    delete(key) {
+    async delete(key) {
         try {
             if (!fs.existsSync(this.envPath)) return true;
 
-            const content = fs.readFileSync(this.envPath, 'utf8');
+            const content = await fs.promises.readFile(this.envPath, 'utf8');
             const lines = content.split(/\r?\n/);
 
             const newLines = lines.filter(line => {
@@ -115,7 +115,7 @@ export class EnvManager {
                 return !(match && match[1] === key);
             });
 
-            fs.writeFileSync(this.envPath, newLines.join('\n'), 'utf8');
+            await fs.promises.writeFile(this.envPath, newLines.join('\n'), 'utf8');
             return true;
         } catch (error) {
             console.error('[EnvManager] Failed to delete from .env:', error);
