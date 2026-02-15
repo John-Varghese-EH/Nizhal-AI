@@ -20,8 +20,10 @@ const ParticleEffects = React.forwardRef((props, ref) => {
 
             // Create all particles at once instead of one by one to avoid multiple re-renders
             const newParticles = [];
+            const particleIds = [];
             for (let i = 0; i < count; i++) {
                 const id = Date.now() + Math.random() + i;
+                particleIds.push(id);
                 newParticles.push({
                     id,
                     type,
@@ -32,15 +34,15 @@ const ParticleEffects = React.forwardRef((props, ref) => {
                         y: -Math.random() * 10 - 5
                     }
                 });
-
-                // Auto cleanup for each particle
-                setTimeout(() => {
-                    setParticles(prev => prev.filter(p => p.id !== id));
-                }, 2000);
             }
 
             // Single state update for all particles
             setParticles(prev => [...prev, ...newParticles]);
+
+            // Single cleanup timer for all particles created in this burst
+            setTimeout(() => {
+                setParticles(prev => prev.filter(p => !particleIds.includes(p.id)));
+            }, 2000);
         }
     }));
 

@@ -15,10 +15,6 @@ export class EnvManager {
      * Returns object with key-value pairs
      */
     async getAll() {
-        if (!fs.existsSync(this.envPath)) {
-            return {};
-        }
-
         try {
             const content = await fs.promises.readFile(this.envPath, 'utf8');
             const lines = content.split('\n');
@@ -54,6 +50,10 @@ export class EnvManager {
 
             return env;
         } catch (error) {
+            // Return empty object if file doesn't exist or can't be read
+            if (error.code === 'ENOENT') {
+                return {};
+            }
             console.error('[EnvManager] Failed to read .env:', error);
             return {};
         }
@@ -66,8 +66,13 @@ export class EnvManager {
     async set(key, value) {
         try {
             let content = '';
-            if (fs.existsSync(this.envPath)) {
+            try {
                 content = await fs.promises.readFile(this.envPath, 'utf8');
+            } catch (error) {
+                // File doesn't exist yet, start with empty content
+                if (error.code !== 'ENOENT') {
+                    throw error;
+                }
             }
 
             const lines = content.split(/\r?\n/);
@@ -105,8 +110,6 @@ export class EnvManager {
      */
     async delete(key) {
         try {
-            if (!fs.existsSync(this.envPath)) return true;
-
             const content = await fs.promises.readFile(this.envPath, 'utf8');
             const lines = content.split(/\r?\n/);
 
@@ -118,6 +121,10 @@ export class EnvManager {
             await fs.promises.writeFile(this.envPath, newLines.join('\n'), 'utf8');
             return true;
         } catch (error) {
+            // If file doesn't exist, consider deletion successful
+            if (error.code === 'ENOENT') {
+                return true;
+            }
             console.error('[EnvManager] Failed to delete from .env:', error);
             return false;
         }

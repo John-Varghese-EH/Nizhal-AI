@@ -355,6 +355,15 @@ const OptimizedVRMModel = React.memo(({
             onPointerMove={handlePointerMove}
         />
     );
+}, (prevProps, nextProps) => {
+    // Custom comparison to prevent re-renders when only callbacks change
+    return prevProps.url === nextProps.url &&
+           prevProps.scale === nextProps.scale &&
+           prevProps.enableLookAt === nextProps.enableLookAt &&
+           prevProps.enableBlink === nextProps.enableBlink &&
+           prevProps.expression === nextProps.expression &&
+           prevProps.isSpeaking === nextProps.isSpeaking &&
+           JSON.stringify(prevProps.position) === JSON.stringify(nextProps.position);
 });
 
 /**
@@ -441,6 +450,15 @@ const OptimizedVRMAvatar = React.memo(({
             )}
         </div>
     );
+}, (prevProps, nextProps) => {
+    // Custom comparison to prevent re-renders when only callbacks change
+    return prevProps.modelUrl === nextProps.modelUrl &&
+           prevProps.expression === nextProps.expression &&
+           prevProps.isSpeaking === nextProps.isSpeaking &&
+           prevProps.isThinking === nextProps.isThinking &&
+           prevProps.enableInteraction === nextProps.enableInteraction &&
+           prevProps.quality === nextProps.quality &&
+           JSON.stringify(prevProps.size) === JSON.stringify(nextProps.size);
 });
 
 // Export both: default is full component with Canvas, named is just the model
