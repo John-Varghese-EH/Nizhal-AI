@@ -31,8 +31,9 @@ const loadVRMDeps = async () => {
 
 /**
  * OptimizedVRMModel - Resource-efficient VRM renderer
+ * Memoized to prevent unnecessary re-renders
  */
-const OptimizedVRMModel = ({
+const OptimizedVRMModel = React.memo(({
     url,
     scale = 1,
     position = [0, 0, 0],
@@ -354,12 +355,22 @@ const OptimizedVRMModel = ({
             onPointerMove={handlePointerMove}
         />
     );
-};
+}, (prevProps, nextProps) => {
+    // Custom comparison to prevent re-renders when only callbacks change
+    return prevProps.url === nextProps.url &&
+           prevProps.scale === nextProps.scale &&
+           prevProps.enableLookAt === nextProps.enableLookAt &&
+           prevProps.enableBlink === nextProps.enableBlink &&
+           prevProps.expression === nextProps.expression &&
+           prevProps.isSpeaking === nextProps.isSpeaking &&
+           JSON.stringify(prevProps.position) === JSON.stringify(nextProps.position);
+});
 
 /**
  * OptimizedVRMAvatar - Full avatar component with Canvas
+ * Memoized to prevent unnecessary re-renders
  */
-const OptimizedVRMAvatar = ({
+const OptimizedVRMAvatar = React.memo(({
     modelUrl,
     size = { width: 200, height: 300 },
     expression = 'neutral',
@@ -439,7 +450,16 @@ const OptimizedVRMAvatar = ({
             )}
         </div>
     );
-};
+}, (prevProps, nextProps) => {
+    // Custom comparison to prevent re-renders when only callbacks change
+    return prevProps.modelUrl === nextProps.modelUrl &&
+           prevProps.expression === nextProps.expression &&
+           prevProps.isSpeaking === nextProps.isSpeaking &&
+           prevProps.isThinking === nextProps.isThinking &&
+           prevProps.enableInteraction === nextProps.enableInteraction &&
+           prevProps.quality === nextProps.quality &&
+           JSON.stringify(prevProps.size) === JSON.stringify(nextProps.size);
+});
 
 // Export both: default is full component with Canvas, named is just the model
 export { OptimizedVRMModel };

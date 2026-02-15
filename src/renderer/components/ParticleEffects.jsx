@@ -12,25 +12,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 const ParticleEffects = React.forwardRef((props, ref) => {
     const [particles, setParticles] = useState([]);
 
-    const addParticle = useCallback((type, x, y) => {
-        const id = Date.now() + Math.random();
-        const particle = {
-            id,
-            type,
-            x,
-            y,
-            velocity: {
-                x: (Math.random() - 0.5) * 10,
-                y: -Math.random() * 10 - 5
-            }
-        };
-        setParticles(prev => [...prev, particle]);
-
-        // Auto cleanup
-        setTimeout(() => {
-            setParticles(prev => prev.filter(p => p.id !== id));
-        }, 2000);
-    }, []);
+    // Generate cryptographically secure random ID
+    const generateSecureId = () => {
+        const array = new Uint32Array(2);
+        crypto.getRandomValues(array);
+        return `${array[0]}-${array[1]}`;
+    };
 
     useImperativeHandle(ref, () => ({
         burst: (type, viewportX, viewportY, count = 10) => {
@@ -38,9 +25,31 @@ const ParticleEffects = React.forwardRef((props, ref) => {
             const startX = viewportX || window.innerWidth / 2;
             const startY = viewportY || window.innerHeight / 2;
 
+            // Create all particles at once instead of one by one to avoid multiple re-renders
+            const newParticles = [];
+            const particleIds = [];
             for (let i = 0; i < count; i++) {
-                setTimeout(() => addParticle(type, startX, startY), i * 50);
+                const id = generateSecureId();
+                particleIds.push(id);
+                newParticles.push({
+                    id,
+                    type,
+                    x: startX,
+                    y: startY,
+                    velocity: {
+                        x: (Math.random() - 0.5) * 10,
+                        y: -Math.random() * 10 - 5
+                    }
+                });
             }
+
+            // Single state update for all particles
+            setParticles(prev => [...prev, ...newParticles]);
+
+            // Single cleanup timer for all particles created in this burst
+            setTimeout(() => {
+                setParticles(prev => prev.filter(p => !particleIds.includes(p.id)));
+            }, 2000);
         }
     }));
 
