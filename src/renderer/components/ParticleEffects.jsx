@@ -12,6 +12,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 const ParticleEffects = React.forwardRef((props, ref) => {
     const [particles, setParticles] = useState([]);
 
+    // Generate cryptographically secure random ID
+    const generateSecureId = () => {
+        const array = new Uint32Array(2);
+        crypto.getRandomValues(array);
+        return `${array[0]}-${array[1]}`;
+    };
+
     useImperativeHandle(ref, () => ({
         burst: (type, viewportX, viewportY, count = 10) => {
             // Default center if no coords
@@ -22,7 +29,7 @@ const ParticleEffects = React.forwardRef((props, ref) => {
             const newParticles = [];
             const particleIds = [];
             for (let i = 0; i < count; i++) {
-                const id = Date.now() + Math.random() + i;
+                const id = generateSecureId();
                 particleIds.push(id);
                 newParticles.push({
                     id,
