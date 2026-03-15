@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Attribution from './Attribution';
 import LegalDocumentViewer from './LegalDocumentViewer';
-import { Key, Eye, EyeOff, Lock, Plus, Trash2, Edit2, Save, X } from 'lucide-react';
+import { Key, Eye, EyeOff, Lock, Plus, Trash2, Edit2, Save, X, RefreshCw } from 'lucide-react';
+import { useToast } from '../contexts/ToastContext';
 
 const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacyToggle, isModal = false, userProfile, onProfileChange }) => {
     const toast = useToast(); // Hook usage

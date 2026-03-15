@@ -8,6 +8,7 @@ export class MemoryService {
         this.dataPath = path.resolve(dataPath);
         this.memoryFile = path.join(this.dataPath, 'memory.json');
         this.preferencesFile = path.join(this.dataPath, 'preferences.json');
+        this.attachmentFile = path.join(this.dataPath, 'attachment.json');
         this.conversationHistory = [];
         this.userPreferences = {};
         this.embeddings = new Map();
@@ -244,5 +245,51 @@ export class MemoryService {
             newestEntry: this.conversationHistory[this.conversationHistory.length - 1]?.timestamp,
             embeddingsCount: this.embeddings.size
         };
+    }
+
+    /**
+     * Get user attachment data
+     */
+    async getUserAttachmentData() {
+        try {
+            const data = await fs.readFile(this.attachmentFile, 'utf-8');
+            return JSON.parse(data);
+        } catch (error) {
+            // Return default attachment data if file doesn't exist
+            return {
+                patterns: {
+                    activeHours: [],
+                    preferredTopics: {},
+                    emotionalStates: [],
+                    interactionFrequency: {},
+                    lastInteractions: []
+                },
+                preferences: {
+                    name: null,
+                    interests: [],
+                    communicationStyle: 'friendly',
+                    humorLevel: 'moderate',
+                    emotionalSupport: true,
+                    reminderFrequency: 'moderate'
+                },
+                attachmentLevel: 0,
+                trustLevel: 50,
+                familiarityScore: 0,
+                lastSaved: Date.now()
+            };
+        }
+    }
+
+    /**
+     * Save user attachment data
+     */
+    async saveUserAttachmentData(data) {
+        try {
+            await fs.writeFile(this.attachmentFile, JSON.stringify(data, null, 2));
+            return true;
+        } catch (error) {
+            console.error('[MemoryService] Failed to save attachment data:', error);
+            return false;
+        }
     }
 }

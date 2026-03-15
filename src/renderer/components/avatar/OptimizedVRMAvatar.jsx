@@ -11,6 +11,11 @@ import { getAdvancedAnimationEngine, InteractionType } from '../../../services/A
 // Extend THREE objects for R3F (required in v8+)
 extend(THREE);
 
+// Performance monitoring
+let performanceMode = 'standard'; // 'standard', 'low', 'minimal'
+let frameSkipCounter = 0;
+const FRAME_SKIP_THRESHOLD = 2; // Skip every 3rd frame on low-end
+
 // Lazy import VRM loader to reduce initial bundle
 let VRMLoaderPlugin = null;
 let VRMUtils = null;
@@ -180,21 +185,31 @@ const OptimizedVRMModel = ({
         if (!vrm) return;
 
         frameCountRef.current++;
+        
+        // Performance optimization: skip frames on low-end mode
+        if (performanceMode === 'low') {
+            frameSkipCounter++;
+            if (frameSkipCounter % FRAME_SKIP_THRESHOLD !== 0) {
+                return; // Skip this frame
+            }
+        }
 
-        // Full quality - update every frame
-        const dt = delta;
+        // Adaptive quality based on performance mode
+        const dt = performanceMode === 'minimal' ? delta * 2 : delta;
 
         // Required for VRM visibility and spring bones
         vrm.update(dt);
 
-        // Update state controller
+        // Update state controller (reduced frequency on low-end)
         const stateController = stateControllerRef.current;
-        stateController.update(dt);
+        if (performanceMode !== 'minimal' || frameCountRef.current % 2 === 0) {
+            stateController.update(dt);
+        }
 
         // Get current avatar state
         const currentState = stateController.getState();
 
-        // Update VRMA animation mixer
+        // Update VRMA animation mixer (reduced frequency on low-end)
         const vrmaService = vrmaServiceRef.current;
         if (vrmaService) {
             vrmaService.update(dt);
@@ -226,13 +241,15 @@ const OptimizedVRMModel = ({
                 });
             }
 
-            // Random idle gestures every 30-60 seconds
+            // Random idle gestures (reduced frequency on low-end)
             if (currentState === AvatarState.IDLE) {
                 idleGestureTimerRef.current += dt;
-                if (idleGestureTimerRef.current > 30 + Math.random() * 30) {
+                const gestureInterval = performanceMode === 'low' ? 60 : 30; // Longer intervals on low-end
+                if (idleGestureTimerRef.current > gestureInterval + Math.random() * gestureInterval) {
                     idleGestureTimerRef.current = 0;
-                    // 40% chance to play a gesture
-                    if (Math.random() < 0.4) {
+                    // Lower chance on low-end devices
+                    const gestureChance = performanceMode === 'low' ? 0.2 : 0.4;
+                    if (Math.random() < gestureChance) {
                         vrmaService.playRandomGesture();
                     }
                 }
@@ -242,23 +259,25 @@ const OptimizedVRMModel = ({
         }
 
         // Blink animation (disabled during sleeping - eyes closed)
+        // Reduced frequency on low-end devices
         if (enableBlink && currentState !== AvatarState.SLEEPING) {
             blinkTimerRef.current += dt;
-            if (blinkTimerRef.current > 3 + Math.random() * 4) {
+            const blinkInterval = performanceMode === 'low' ? 6 : 3; // Less frequent blinking
+            if (blinkTimerRef.current > blinkInterval + Math.random() * blinkInterval) {
                 blinkTimerRef.current = 0;
                 const blinkExpr = vrm.expressionManager?.getExpression('blink');
                 if (blinkExpr) {
                     vrm.expressionManager.setValue('blink', 1);
                     setTimeout(() => {
                         vrm.expressionManager?.setValue('blink', 0);
-                    }, 100);
+                    }, performanceMode === 'low' ? 150 : 100); // Slower blink on low-end
                 }
             }
         }
 
-        // Mouth animation for speaking
+        // Mouth animation for speaking (simplified on low-end)
         if (isSpeaking && vrm.expressionManager) {
-            const mouthValue = 0.3 + Math.sin(state.clock.elapsedTime * 15) * 0.2;
+            const mouthValue = performanceMode === 'minimal' ? 0.5 : 0.3 + Math.sin(state.clock.elapsedTime * 15) * 0.2;
             vrm.expressionManager.setValue('aa', mouthValue);
             // Set speaking state if not already
             if (currentState !== AvatarState.SPEAKING) {
@@ -371,16 +390,54 @@ const OptimizedVRMAvatar = ({
     onError
 }) => {
     const [isLoaded, setIsLoaded] = useState(false);
+    const [currentPerformanceMode, setCurrentPerformanceMode] = useState('standard');
 
-    // Quality presets
-    const qualitySettings = useMemo(() => ({
-        low: { pixelRatio: 0.75, antialias: true, shadows: false },
-        medium: { pixelRatio: 1, antialias: true, shadows: false },
-        high: { pixelRatio: 1.5, antialias: true, shadows: true }
-    }), []);
+    // Listen for performance mode changes from main process
+    useEffect(() => {
+        const handlePerformanceMode = (event) => {
+            const { isLowEnd } = event.data;
+            const mode = isLowEnd ? 'low' : 'standard';
+            performanceMode = mode;
+            setCurrentPerformanceMode(mode);
+            console.log(`[OptimizedVRMAvatar] Performance mode: ${mode}`);
+        };
 
-    // Default to high quality
-    const settings = qualitySettings[quality] || qualitySettings.high;
+        window.addEventListener('message', handlePerformanceMode);
+        
+        // Request initial performance mode
+        if (window.electronAPI) {
+            window.electronAPI.invoke('system:getPerformanceMode').then(({ isLowEnd }) => {
+                const mode = isLowEnd ? 'low' : 'standard';
+                performanceMode = mode;
+                setCurrentPerformanceMode(mode);
+            });
+        }
+
+        return () => {
+            window.removeEventListener('message', handlePerformanceMode);
+        };
+    }, []);
+
+    // Quality presets based on performance mode
+    const qualitySettings = useMemo(() => {
+        const baseSettings = {
+            low: { pixelRatio: 0.5, antialias: false, shadows: false },
+            medium: { pixelRatio: 1, antialias: true, shadows: false },
+            high: { pixelRatio: 1.5, antialias: true, shadows: true }
+        };
+        
+        // Force low quality on low-end devices
+        if (currentPerformanceMode === 'low') {
+            return baseSettings.low;
+        }
+        
+        return baseSettings[quality] || baseSettings.medium;
+    }, [quality, currentPerformanceMode]);
+
+    // Adaptive frame loop based on performance
+    const frameLoop = useMemo(() => {
+        return currentPerformanceMode === 'low' ? 'demand' : 'always';
+    }, [currentPerformanceMode]);
 
     const handleLoad = useCallback((vrm) => {
         setIsLoaded(true);
@@ -396,20 +453,30 @@ const OptimizedVRMAvatar = ({
             <Canvas
                 key={modelUrl}
                 camera={{ position: [0, 0.8, 3], fov: 50 }}
-                dpr={settings.pixelRatio}
+                dpr={qualitySettings.pixelRatio}
                 gl={{
-                    antialias: settings.antialias,
+                    antialias: qualitySettings.antialias,
                     alpha: true,
-                    powerPreference: 'high-performance',
-                    preserveDrawingBuffer: true
+                    powerPreference: currentPerformanceMode === 'low' ? 'default' : 'high-performance',
+                    preserveDrawingBuffer: false // Disable on low-end to save memory
                 }}
                 style={{ background: 'transparent' }}
-                frameloop="always"
+                frameloop={frameLoop}
+                performance={{ min: 0.5, max: currentPerformanceMode === 'low' ? 30 : 60 }} // FPS limits
             >
-                {/* Improved lighting for better VRM rendering */}
-                <ambientLight intensity={0.8} />
-                <directionalLight position={[5, 5, 5]} intensity={0.7} />
-                <directionalLight position={[-5, 3, -5]} intensity={0.3} />
+                {/* Simplified lighting for low-end devices */}
+                {currentPerformanceMode === 'low' ? (
+                    <>
+                        <ambientLight intensity={0.6} />
+                        <directionalLight position={[5, 5, 5]} intensity={0.5} />
+                    </>
+                ) : (
+                    <>
+                        <ambientLight intensity={0.8} />
+                        <directionalLight position={[5, 5, 5]} intensity={0.7} />
+                        <directionalLight position={[-5, 3, -5]} intensity={0.3} />
+                    </>
+                )}
 
                 <OptimizedVRMModel
                     key={modelUrl}
@@ -421,7 +488,7 @@ const OptimizedVRMAvatar = ({
                     onError={onError}
                 />
 
-                {enableInteraction && (
+                {enableInteraction && currentPerformanceMode !== 'minimal' && (
                     <OrbitControls
                         enableZoom={false}
                         enablePan={false}
@@ -435,6 +502,13 @@ const OptimizedVRMAvatar = ({
             {isThinking && (
                 <div className="absolute top-2 left-1/2 -translate-x-1/2 text-lg animate-bounce">
                     💭
+                </div>
+            )}
+            
+            {/* Performance mode indicator (development only) */}
+            {process.env.NODE_ENV === 'development' && currentPerformanceMode === 'low' && (
+                <div className="absolute top-2 right-2 text-xs bg-yellow-500 text-black px-1 rounded">
+                    LOW-END MODE
                 </div>
             )}
         </div>

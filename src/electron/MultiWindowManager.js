@@ -24,7 +24,7 @@ export class MultiWindowManager {
 
     /**
      * Create the character overlay window (transparent, always-on-top)
-     * Sizes dynamically based on screen resolution
+     * Enhanced for better OS integration and productivity
      */
     async createCharacterWindow(preloadPath) {
         const display = screen.getPrimaryDisplay();
@@ -53,17 +53,30 @@ export class MultiWindowManager {
             hasShadow: false,
             focusable: true,
             backgroundColor: '#00000000',
+            type: 'toolbar', // Better OS integration on macOS
+            vibrancy: 'under-window', // macOS blur effect
+            visualEffectState: 'active', // macOS visual state
             webPreferences: {
                 preload: preloadPath,
                 contextIsolation: true,
                 nodeIntegration: false,
-                sandbox: true
+                sandbox: true,
+                // Performance optimizations
+                backgroundThrottling: false,
+                offscreen: false,
+                spellcheck: false
             },
             icon: path.join(process.cwd(), 'assets', 'icon.png')
         });
 
-        // Character window specific settings
+        // Enhanced window properties for better OS integration
         this.characterWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+        this.characterWindow.setAlwaysOnTop(true, 'floating', 1);
+        
+        // Set app user model ID for Windows (better taskbar integration)
+        if (process.platform === 'win32') {
+            app.setAppUserModelId('Nizhal AI');
+        }
 
         // Enable click-through on transparent pixels
         // This allows clicks to pass through empty areas but still interact with the character
@@ -85,6 +98,19 @@ export class MultiWindowManager {
         this.characterWindow.webContents.on('did-finish-load', () => {
             this.characterWindow.webContents.send('window:ready', 'character');
             this.characterWindow.webContents.send('window:resize', { width: targetWidth, height: targetHeight });
+            // Send performance mode info
+            this.characterWindow.webContents.send('system:performanceMode', {
+                isLowEnd: global.isLowEndMode || false
+            });
+        });
+
+        // Window blur/focus handling for productivity
+        this.characterWindow.on('blur', () => {
+            this.characterWindow.webContents.send('window:blur');
+        });
+        
+        this.characterWindow.on('focus', () => {
+            this.characterWindow.webContents.send('window:focus');
         });
 
         return this.characterWindow;
@@ -92,6 +118,7 @@ export class MultiWindowManager {
 
     /**
      * Toggle click-through mode for character window
+     * Enhanced with visual feedback and smart behavior
      * @param {boolean} ignore - If true, enables click-through
      */
     setCharacterClickThrough(ignore) {
@@ -99,9 +126,11 @@ export class MultiWindowManager {
             if (ignore) {
                 // Enable click-through with forwarding (clicks pass through transparent areas)
                 this.characterWindow.setIgnoreMouseEvents(true, { forward: true });
+                this.characterWindow.webContents.send('character:interactionMode', 'clickthrough');
             } else {
                 // Disable click-through (window captures all clicks)
                 this.characterWindow.setIgnoreMouseEvents(false);
+                this.characterWindow.webContents.send('character:interactionMode', 'interactive');
             }
         }
     }
@@ -346,7 +375,8 @@ export class MultiWindowManager {
     }
 
     /**
-     * Snap character to corner
+     * Snap character to corner with smart positioning
+     * Enhanced to avoid blocking important UI elements
      */
     snapCharacterToCorner(corner) {
         if (!this.characterWindow || this.characterWindow.isDestroyed()) return;
@@ -355,6 +385,7 @@ export class MultiWindowManager {
         const { width, height } = display.workArea;
         const winBounds = this.characterWindow.getBounds();
         const padding = 20;
+        const taskbarHeight = process.platform === 'win32' ? 48 : 0; // Windows taskbar estimation
 
         let x = 0;
         let y = 0;
@@ -370,15 +401,17 @@ export class MultiWindowManager {
                 break;
             case 'bottom-left':
                 x = padding;
-                y = height - winBounds.height - padding;
+                y = height - winBounds.height - padding - taskbarHeight;
                 break;
             case 'bottom-right':
                 x = width - winBounds.width - padding;
-                y = height - winBounds.height - padding;
+                y = height - winBounds.height - padding - taskbarHeight;
                 break;
         }
 
         this.characterWindow.setPosition(Math.round(x), Math.round(y));
+        // Notify renderer of position change for smooth transitions
+        this.characterWindow.webContents.send('window:position', { x: Math.round(x), y: Math.round(y), corner });
     }
 
     /**

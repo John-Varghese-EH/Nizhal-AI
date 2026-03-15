@@ -36,7 +36,7 @@ export class AIService {
         // Fallback settings
         this.enableFallback = true;
         this.lastWorkingProvider = null;
-        this.providerPriority = ['gemini', 'ollama', 'openai', 'anthropic'];
+        this.providerPriority = ['groq', 'gemini', 'huggingface', 'together', 'ollama', 'openai', 'anthropic', 'custom'];
 
         // Gemini model fallback order (when quota exceeded)
         this.geminiModelFallback = [
@@ -56,7 +56,10 @@ export class AIService {
             gemini: { consecutiveFailures: 0, nextAllowedTime: 0 },
             openai: { consecutiveFailures: 0, nextAllowedTime: 0 },
             anthropic: { consecutiveFailures: 0, nextAllowedTime: 0 },
-            ollama: { consecutiveFailures: 0, nextAllowedTime: 0 }
+            ollama: { consecutiveFailures: 0, nextAllowedTime: 0 },
+            groq: { consecutiveFailures: 0, nextAllowedTime: 0 },
+            huggingface: { consecutiveFailures: 0, nextAllowedTime: 0 },
+            together: { consecutiveFailures: 0, nextAllowedTime: 0 }
         };
 
         // Gemini Free Tier Limits (Requests Per Minute)
@@ -72,7 +75,10 @@ export class AIService {
             gemini: { requests: 0, resetTime: 0, maxPerMinute: 12, lastRequest: 0 },
             openai: { requests: 0, resetTime: 0, maxPerMinute: 50, lastRequest: 0 },
             anthropic: { requests: 0, resetTime: 0, maxPerMinute: 50, lastRequest: 0 },
-            ollama: { requests: 0, resetTime: 0, maxPerMinute: 999, lastRequest: 0 }
+            ollama: { requests: 0, resetTime: 0, maxPerMinute: 999, lastRequest: 0 },
+            groq: { requests: 0, resetTime: 0, maxPerMinute: 30, lastRequest: 0 },
+            huggingface: { requests: 0, resetTime: 0, maxPerMinute: 60, lastRequest: 0 },
+            together: { requests: 0, resetTime: 0, maxPerMinute: 20, lastRequest: 0 }
         };
 
         // Minimum delay between requests (ms) to prevent rate limiting
@@ -80,7 +86,10 @@ export class AIService {
             gemini: 4000,  // 4 seconds = max 15 per minute
             openai: 500,
             anthropic: 500,
-            ollama: 0
+            ollama: 0,
+            groq: 2000,   // 2 seconds = max 30 per minute
+            huggingface: 1000,  // 1 second = max 60 per minute
+            together: 3000   // 3 seconds = max 20 per minute
         };
 
         // Request queue for when rate limited
@@ -98,7 +107,10 @@ export class AIService {
             gemini: { failures: 0, lastSuccess: null, lastError: null },
             ollama: { failures: 0, lastSuccess: null, lastError: null },
             openai: { failures: 0, lastSuccess: null, lastError: null },
-            anthropic: { failures: 0, lastSuccess: null, lastError: null }
+            anthropic: { failures: 0, lastSuccess: null, lastError: null },
+            groq: { failures: 0, lastSuccess: null, lastError: null },
+            huggingface: { failures: 0, lastSuccess: null, lastError: null },
+            together: { failures: 0, lastSuccess: null, lastError: null }
         };
 
         // Enhanced: Request timeout
@@ -135,6 +147,25 @@ export class AIService {
                 model: 'deepseek/deepseek-r1',
                 apiKey: '',
                 baseUrl: 'https://openrouter.ai/api/v1',
+                enabled: true
+            },
+            // Free online models
+            huggingface: {
+                model: 'microsoft/DialoGPT-medium',
+                apiKey: '', // Optional
+                baseUrl: 'https://api-inference.huggingface.co',
+                enabled: true
+            },
+            groq: {
+                model: 'llama3-8b-8192',
+                apiKey: '',
+                baseUrl: 'https://api.groq.com/openai/v1',
+                enabled: true
+            },
+            together: {
+                model: 'meta-llama/Llama-3-8b-chat-hf',
+                apiKey: '',
+                baseUrl: 'https://api.together.xyz/v1',
                 enabled: true
             }
         };
@@ -190,6 +221,22 @@ export class AIService {
 
         if (process.env.OLLAMA_URL) {
             this.providerConfigs.ollama.baseUrl = process.env.OLLAMA_URL;
+        }
+
+        // Load free provider API keys
+        if (process.env.HUGGINGFACE_API_KEY) {
+            this.providerConfigs.huggingface.apiKey = process.env.HUGGINGFACE_API_KEY;
+            console.log('[AIService] ✓ HuggingFace API key loaded');
+        }
+
+        if (process.env.GROQ_API_KEY) {
+            this.providerConfigs.groq.apiKey = process.env.GROQ_API_KEY;
+            console.log('[AIService] ✓ Groq API key loaded');
+        }
+
+        if (process.env.TOGETHER_API_KEY) {
+            this.providerConfigs.together.apiKey = process.env.TOGETHER_API_KEY;
+            console.log('[AIService] ✓ Together API key loaded');
         }
 
         // Optional: Custom model overrides
@@ -340,6 +387,12 @@ export class AIService {
             case 'gemini':
             case 'openai':
             case 'anthropic':
+            case 'groq':
+            case 'together':
+                return !!config.apiKey;
+            case 'huggingface':
+                return true; // HuggingFace works without API key (with limits)
+            case 'custom':
                 return !!config.apiKey;
             default:
                 return false;
