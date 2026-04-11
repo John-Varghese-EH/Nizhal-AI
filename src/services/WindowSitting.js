@@ -61,10 +61,18 @@ class WindowSittingService {
      */
     handleWindowUpdate(data) {
         if (!this.enabled) return;
-        if (!data.character) return;
 
-        const { windows, taskbar, character } = data;
-        const charRect = character;
+        const { windows, taskbar } = data;
+        
+        // In full-screen overlay mode, character physical window is 100vw/vh.
+        // We use the virtual screen bounds updated by R3F.
+        const charRect = window.nizhalCharacterScreenPos || {
+            x: window.innerWidth / 2 - 150,
+            y: window.innerHeight - 400,
+            width: 300,
+            height: 400
+        };
+
         const charBottom = charRect.y + charRect.height;
         const charCenter = charRect.x + charRect.width / 2;
 

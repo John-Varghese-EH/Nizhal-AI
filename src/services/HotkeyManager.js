@@ -1,4 +1,4 @@
-import { globalShortcut } from 'electron';
+// Global shortcuts handled by Tauri's global-shortcut plugin (registered in Rust)
 // Note: In renderer, we might need IPC to register global shortcuts or use 'mousetrap'/'react-hotkeys-hook' for local.
 // Since requirement says "Global Shortcuts", these usually need Main process registration or heavy IPC.
 // We'll write a Service that communicates with Main via IPC to toggle these.

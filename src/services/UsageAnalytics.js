@@ -1,4 +1,12 @@
-import Store from 'electron-store';
+// Browser-compatible store (replaces electron-store)
+class LocalStore {
+    constructor({ name }) {
+        this.prefix = name;
+    }
+    has(key) { return localStorage.getItem(`${this.prefix}:${key}`) !== null; }
+    get(key) { try { return JSON.parse(localStorage.getItem(`${this.prefix}:${key}`)); } catch { return null; } }
+    set(key, value) { localStorage.setItem(`${this.prefix}:${key}`, JSON.stringify(value)); }
+}
 
 /**
  * UsageAnalytics - Privacy-first local engagement tracking
@@ -10,7 +18,8 @@ import Store from 'electron-store';
  */
 export class UsageAnalytics {
     constructor() {
-        this.store = new Store({ name: 'nizhal-analytics' });
+        this.store = new LocalStore({ name: 'nizhal-analytics' });
+
         this.sessionStart = Date.now();
         this.initialize();
     }

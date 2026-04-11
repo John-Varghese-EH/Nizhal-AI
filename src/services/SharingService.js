@@ -1,5 +1,5 @@
 import { toPng } from 'html-to-image';
-import { clipboard } from 'electron';
+// Clipboard handled via browser APIs (navigator.clipboard)
 
 /**
  * SharingService - Handles viral content generation

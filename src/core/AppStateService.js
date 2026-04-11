@@ -8,7 +8,14 @@
  * - Type-safe state access
  */
 
-import Store from 'electron-store';
+// Browser-compatible store (replaces electron-store)
+class LocalStore {
+    constructor({ name }) { this.prefix = name; }
+    has(key) { return localStorage.getItem(`${this.prefix}:${key}`) !== null; }
+    get(key) { try { return JSON.parse(localStorage.getItem(`${this.prefix}:${key}`)); } catch { return null; } }
+    set(key, value) { localStorage.setItem(`${this.prefix}:${key}`, JSON.stringify(value)); }
+    clear() { localStorage.removeItem(this.prefix); }
+}
 
 // Personality modes for the AI companion
 export const PersonalityMode = {
@@ -100,7 +107,7 @@ class AppStateService {
         this.ipcMain = ipcMain;
 
         // Initialize electron-store with schema validation
-        this.store = new Store({
+        this.store = new LocalStore({
             name: 'nizhal-state',
             defaults: defaultState,
             schema: {
@@ -166,7 +173,7 @@ class AppStateService {
         });
 
         // Load persisted state
-        this.state = this.store.store;
+        this.state = this.store.get('state') || { ...defaultState };
 
         // Setup IPC handlers
         this._setupIPC();
@@ -285,7 +292,7 @@ class AppStateService {
 
         // Persist to store
         if (this.store) {
-            this.store.set(path, value);
+            this.store.set('state', this.state);
         }
 
         // Notify observers

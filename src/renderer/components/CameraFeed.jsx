@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { Camera, CameraOff, RefreshCw, AlertCircle, Box } from 'lucide-react';
 import cameraService from '../../services/CameraService';
 import { objectDetectionService } from '../../services/ObjectDetectionService';
+import { LocalVideoTrack } from 'livekit-client';
+import { livekitVoiceService } from '../services/LiveKitVoiceService';
 
 /**
  * CameraFeed - Camera preview component with controls
@@ -172,11 +174,7 @@ const CameraFeed = ({
         }
     };
 
-    // Publish current camera stream to LiveKit
     const publishToLiveKit = async () => {
-        // Use dynamic import to avoid issues if livekit-client not loaded yet
-        const { LocalVideoTrack } = await import('livekit-client');
-        const { livekitVoiceService } = await import('../services/LiveKitVoiceService');
 
         if (livekitVoiceService.isConnected && livekitVoiceService.room) {
             console.log('[CameraFeed] LiveKit connected, publishing video...');
@@ -210,14 +208,12 @@ const CameraFeed = ({
                 // But startCamera only runs when we toggle Camera.
                 // If we connect Voice AFTER Camera, we need to publish.
                 // So polling is good.
-                import('../services/LiveKitVoiceService').then(({ livekitVoiceService }) => {
-                    if (livekitVoiceService.isConnected && livekitVoiceService.room) {
-                        // We can try to publish. If already published, it might warn.
-                        // For now, let's keep it simple and only publish on startCamera
-                        // The user can toggle camera off/on to fix if needed. 
-                        // Or we can add a listener.
-                    }
-                });
+                if (livekitVoiceService.isConnected && livekitVoiceService.room) {
+                    // We can try to publish. If already published, it might warn.
+                    // For now, let's keep it simple and only publish on startCamera
+                    // The user can toggle camera off/on to fix if needed. 
+                    // Or we can add a listener.
+                }
             }
         }, 3000);
         return () => clearInterval(checkConnection);

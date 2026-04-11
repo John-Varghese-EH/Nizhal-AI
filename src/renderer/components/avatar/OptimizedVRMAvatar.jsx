@@ -315,9 +315,16 @@ const OptimizedVRMModel = React.memo(({
         touchRegionsService.handleTouch(e, vrm);
     }, [vrm]);
 
-    const handlePointerOver = useCallback(() => {
+    const handlePointerOver = useCallback((e) => {
+        // Only trigger hover state if we hit the actual model, not a transparent bounding box easily
+        e.stopPropagation();
         animEngineRef.current?.handleInteraction(InteractionType.HOVER);
-    }, []);
+        onHoverIn?.();
+    }, [onHoverIn]);
+
+    const handlePointerOut = useCallback((e) => {
+        onHoverOut?.();
+    }, [onHoverOut]);
 
     const handlePointerMove = useCallback((e) => {
         // Detect "rubbing" or "petting" motion (back and forth)
@@ -325,13 +332,10 @@ const OptimizedVRMModel = React.memo(({
         if (now - lastMoveTimeRef.current > 100) {
             lastMoveTimeRef.current = now;
 
-            // Approximate head area (top 20% of the bounding box)
-            // e.point is the 3D intersection point
-            if (e.point && e.point.y > 1.2) { // Rough height check for head
+            if (e.point && e.point.y > 1.2) { 
                 moveHistoryRef.current.push(e.point.x);
                 if (moveHistoryRef.current.length > 5) moveHistoryRef.current.shift();
 
-                // Check for direction changes (zig-zag x-movement)
                 let directionChanges = 0;
                 for (let i = 2; i < moveHistoryRef.current.length; i++) {
                     const prevDelta = moveHistoryRef.current[i - 1] - moveHistoryRef.current[i - 2];
@@ -344,15 +348,12 @@ const OptimizedVRMModel = React.memo(({
                 if (directionChanges >= 2 && !isRubbingRef.current) {
                     isRubbingRef.current = true;
                     console.log('[OptimizedVRMModel] Head Pat Detected! ❤️');
-                    mouseServiceRef.current?.triggerEvent('headPat'); // Notify service
-
-                    // Reset after delay
+                    mouseServiceRef.current?.triggerEvent('headPat'); 
                     setTimeout(() => { isRubbingRef.current = false; }, 1000);
                 }
             }
         }
     }, []);
-
 
     if (loading) {
         return (
@@ -371,6 +372,7 @@ const OptimizedVRMModel = React.memo(({
             position={position}
             onClick={handleClick}
             onPointerOver={handlePointerOver}
+            onPointerOut={handlePointerOut}
             onPointerMove={handlePointerMove}
         />
     );
@@ -415,14 +417,15 @@ const OptimizedVRMAvatar = React.memo(({
 
         window.addEventListener('message', handlePerformanceMode);
         
-        // Request initial performance mode
-        if (window.electronAPI) {
-            window.electronAPI.invoke('system:getPerformanceMode').then(({ isLowEnd }) => {
-                const mode = isLowEnd ? 'low' : 'standard';
+        // Request initial performance mode (via Tauri or browser)
+        if (window.nizhal?.system?.getPerformanceMode) {
+            window.nizhal.system.getPerformanceMode().then(({ is_low_end, isLowEnd }) => {
+                const mode = (is_low_end || isLowEnd) ? 'low' : 'standard';
                 performanceMode = mode;
                 setCurrentPerformanceMode(mode);
-            });
+            }).catch(() => {});
         }
+
 
         return () => {
             window.removeEventListener('message', handlePerformanceMode);

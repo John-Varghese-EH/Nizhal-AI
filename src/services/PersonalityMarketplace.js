@@ -1,4 +1,10 @@
-import Store from 'electron-store';
+// Browser-compatible store (replaces electron-store)
+class LocalStore {
+    constructor({ name }) { this.prefix = name; }
+    has(key) { return localStorage.getItem(`${this.prefix}:${key}`) !== null; }
+    get(key) { try { return JSON.parse(localStorage.getItem(`${this.prefix}:${key}`)); } catch { return null; } }
+    set(key, value) { localStorage.setItem(`${this.prefix}:${key}`, JSON.stringify(value)); }
+}
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -11,7 +17,8 @@ import { v4 as uuidv4 } from 'uuid';
  */
 export class PersonalityMarketplace {
     constructor() {
-        this.store = new Store({ name: 'nizhal-personalities' });
+        this.store = new LocalStore({ name: 'nizhal-personalities' });
+
         this.initialize();
     }
 

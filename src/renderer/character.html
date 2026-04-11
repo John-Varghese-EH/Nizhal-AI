@@ -4,9 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- CSP updated to allow VRM/Three.js blob URLs and model loading -->
-    <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self' blob: data:; script-src 'self' blob: 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https:; connect-src 'self' blob: data: http://localhost:* ws://localhost:* https://*.googleapis.com https://*.gstatic.com https://*.elevenlabs.io https://*.razorpay.com https://*.stripe.com https://api.open-meteo.com https://*.livekit.cloud wss://*.livekit.cloud https://api.openai.com https://api.anthropic.com; worker-src 'self' blob:;">
+    <!-- CSP handled by Tauri security config -->
     <title>Nizhal Character</title>
     <style>
         * {
@@ -22,14 +20,6 @@
             height: 100%;
             overflow: hidden;
             background: transparent;
-            -webkit-app-region: drag;
-        }
-
-        /* Make interactive elements non-draggable */
-        button,
-        canvas,
-        .interactive {
-            -webkit-app-region: no-drag;
         }
     </style>
 </head>

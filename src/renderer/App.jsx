@@ -1,16 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import ChatView from './components/ChatView';
-import Marketplace from './components/Marketplace';
-import SettingsView from './components/SettingsView';
-import JournalView from './components/JournalView';
-import SkinManager from './components/SkinManager';
 import MagicSetup from './components/Onboarding/MagicSetup';
 import AppLayout from './components/layout/AppLayout';
-import LifeView from './components/LifeView';
-import AndroidMirror from './components/AndroidMirror';
 import geminiLiveService from '../services/GeminiLiveService';
 import assistant from '../assistant/index.js';
+
+const ChatView = lazy(() => import('./components/ChatView'));
+const SettingsView = lazy(() => import('./components/SettingsView'));
+const LifeView = lazy(() => import('./components/LifeView'));
+const SkinManager = lazy(() => import('./components/SkinManager'));
+const AndroidMirror = lazy(() => import('./components/AndroidMirror'));
 
 const App = () => {
     const [activePersona, setActivePersona] = useState(null);
@@ -92,6 +91,11 @@ const App = () => {
             geminiLiveService.setPrivacyMode(privacy || false);
 
             if (!prefs?.onboardingComplete) setShowOnboarding(true);
+
+            // Launch the transparent avatar window
+            if (window.nizhal?.character?.create) {
+                await window.nizhal.character.create();
+            }
         } catch (error) {
             console.error('Failed to initialize:', error);
         } finally {
@@ -154,7 +158,11 @@ const App = () => {
             windowMode={windowMode}
         >
             <AnimatePresence>
-                {showMirror && <AndroidMirror onClose={() => setShowMirror(false)} />}
+                {showMirror && (
+                    <Suspense fallback={<div>Loading Mirror...</div>}>
+                        <AndroidMirror onClose={() => setShowMirror(false)} />
+                    </Suspense>
+                )}
             </AnimatePresence>
 
             <AnimatePresence mode="wait">
@@ -168,46 +176,51 @@ const App = () => {
                     >
                         {/* Avatar Layer */}
                         <div className={`relative ${isCompact ? 'absolute inset-0 z-0' : 'w-[450px] shrink-0 h-full z-10 border-r border-white/5'}`}>
-                            {/* Only show SkinManager/Avatar here if needed, or keeping it global? 
-                                 Original design had it always present. For unified, let's keep it here.
-                             */}
                             <div className="w-full h-full opacity-50 md:opacity-100 transition-opacity">
-                                <SkinManager
-                                    personaId={activePersona?.id}
-                                    activeSkin={activePersona?.skin}
-                                    personalityState={personalityState}
-                                    isActive={true}
-                                />
+                                <Suspense fallback={null}>
+                                    <SkinManager
+                                        personaId={activePersona?.id}
+                                        activeSkin={activePersona?.skin}
+                                        personalityState={personalityState}
+                                        isActive={true}
+                                    />
+                                </Suspense>
                             </div>
                         </div>
 
                         {/* Chat Interface */}
                         <div className={`flex-1 flex flex-col z-20 ${isCompact ? 'bg-black/40 backdrop-blur-sm' : 'bg-transparent'}`}>
-                            <ChatView
-                                persona={activePersona}
-                                personalityState={personalityState}
-                                onListeningChange={setIsListening}
-                                onThinkingChange={setIsThinking}
-                                onSpeakingChange={setIsSpeaking}
-                            />
+                            <Suspense fallback={<div className="h-full flex items-center justify-center">Loading Chat...</div>}>
+                                <ChatView
+                                    persona={activePersona}
+                                    personalityState={personalityState}
+                                    onListeningChange={setIsListening}
+                                    onThinkingChange={setIsThinking}
+                                    onSpeakingChange={setIsSpeaking}
+                                />
+                            </Suspense>
                         </div>
                     </motion.div>
                 )}
 
                 {currentView === 'life' && (
                     <motion.div key="life" className="h-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                        <LifeView />
+                        <Suspense fallback={<div className="h-full flex items-center justify-center">Loading Life View...</div>}>
+                            <LifeView />
+                        </Suspense>
                     </motion.div>
                 )}
 
                 {currentView === 'settings' && (
                     <motion.div key="settings" className="h-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                        <SettingsView
-                            onBack={() => setCurrentView('chat')} // Back button might be redundant in Sidebar mode but good for Compact
-                            onPersonaChange={setActivePersona}
-                            privacyMode={privacyMode}
-                            onPrivacyToggle={() => setPrivacyMode(!privacyMode)}
-                        />
+                        <Suspense fallback={<div className="h-full flex items-center justify-center">Loading Settings...</div>}>
+                            <SettingsView
+                                onBack={() => setCurrentView('chat')} // Back button might be redundant in Sidebar mode but good for Compact
+                                onPersonaChange={setActivePersona}
+                                privacyMode={privacyMode}
+                                onPrivacyToggle={() => setPrivacyMode(!privacyMode)}
+                            />
+                        </Suspense>
                     </motion.div>
                 )}
             </AnimatePresence>

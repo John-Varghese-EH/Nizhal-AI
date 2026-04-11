@@ -1,4 +1,10 @@
-import Store from 'electron-store';
+// Browser-compatible store (replaces electron-store)
+class LocalStore {
+    constructor({ name }) { this.prefix = name; }
+    has(key) { return localStorage.getItem(`${this.prefix}:${key}`) !== null; }
+    get(key) { try { return JSON.parse(localStorage.getItem(`${this.prefix}:${key}`)); } catch { return null; } }
+    set(key, value) { localStorage.setItem(`${this.prefix}:${key}`, JSON.stringify(value)); }
+}
 
 /**
  * RelationshipMemory - Manages deep user relationship data
@@ -10,7 +16,7 @@ import Store from 'electron-store';
  */
 export class RelationshipMemory {
     constructor() {
-        this.store = new Store({ name: 'nizhal-memory' });
+        this.store = new LocalStore({ name: 'nizhal-memory' });
         this.initialize();
     }
 

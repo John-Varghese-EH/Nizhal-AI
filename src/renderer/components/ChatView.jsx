@@ -2,6 +2,38 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LiveKitVoiceButton } from './LiveKitVoiceButton';
 import { livekitVoiceService } from '../services/LiveKitVoiceService';
+
+const MessageBubble = React.memo(({ message, persona, getMoodEmoji }) => (
+    <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        transition={{ duration: 0.3 }}
+        className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+    >
+        <div
+            className={`max-w-[80%] rounded-2xl px-5 py-3.5 shadow-sm ${message.role === 'user'
+                ? 'bg-gradient-primary text-white rounded-br-sm'
+                : message.isError
+                    ? 'bg-red-500/10 text-red-200 border border-red-500/20 rounded-bl-sm backdrop-blur-sm'
+                    : message.isCommand
+                        ? 'bg-blue-500/10 text-blue-200 border border-blue-500/20 rounded-bl-sm font-mono text-sm'
+                        : 'glass-panel text-white/90 rounded-bl-sm border-white/5'
+                }`}
+        >
+            {message.role === 'assistant' && !message.isError && (
+                <div className="flex items-center gap-2 mb-1.5 text-xs font-medium text-primary-glow">
+                    <span className="text-sm">{getMoodEmoji()}</span>
+                    <span className="opacity-70">{persona?.name || 'AI'}</span>
+                </div>
+            )}
+            <p className="text-[15px] leading-relaxed whitespace-pre-wrap font-light tracking-wide">
+                {message.content}
+            </p>
+        </div>
+    </motion.div>
+));
+
 const ChatView = ({ persona, personalityState }) => {
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
@@ -49,10 +81,11 @@ const ChatView = ({ persona, personalityState }) => {
         try {
             const history = await window.nizhal?.memory.getHistory(20);
             if (history && history.length > 0) {
-                const formattedHistory = history.flatMap(entry => [
-                    { role: 'user', content: entry.userMessage, timestamp: entry.timestamp },
-                    { role: 'assistant', content: entry.aiResponse, timestamp: entry.timestamp }
-                ]);
+                const formattedHistory = history.map(entry => ({
+                    role: entry.role === 'user' ? 'user' : 'assistant',
+                    content: entry.content || '',
+                    timestamp: entry.timestamp
+                }));
                 setMessages(formattedHistory);
             } else {
                 setMessages([{
@@ -238,40 +271,19 @@ ${voiceStatus === 'connected' ? '✅ LiveKit connected' : '⚠️ LiveKit not co
         return moods[activeMood] || '🤖';
     };
 
+
+
     return (
         <div className="h-full flex flex-col">
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 <AnimatePresence initial={false}>
                     {messages.map((message, index) => (
-                        <motion.div
-                            key={index}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -20 }}
-                            transition={{ duration: 0.3 }}
-                            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                        >
-                            <div
-                                className={`max-w-[80%] rounded-2xl px-5 py-3.5 shadow-sm ${message.role === 'user'
-                                    ? 'bg-gradient-primary text-white rounded-br-sm'
-                                    : message.isError
-                                        ? 'bg-red-500/10 text-red-200 border border-red-500/20 rounded-bl-sm backdrop-blur-sm'
-                                        : message.isCommand
-                                            ? 'bg-blue-500/10 text-blue-200 border border-blue-500/20 rounded-bl-sm font-mono text-sm'
-                                            : 'glass-panel text-white/90 rounded-bl-sm border-white/5'
-                                    }`}
-                            >
-                                {message.role === 'assistant' && !message.isError && (
-                                    <div className="flex items-center gap-2 mb-1.5 text-xs font-medium text-primary-glow">
-                                        <span className="text-sm">{getMoodEmoji()}</span>
-                                        <span className="opacity-70">{persona?.name || 'AI'}</span>
-                                    </div>
-                                )}
-                                <p className="text-[15px] leading-relaxed whitespace-pre-wrap font-light tracking-wide">
-                                    {message.content}
-                                </p>
-                            </div>
-                        </motion.div>
+                        <MessageBubble 
+                            key={index} 
+                            message={message} 
+                            persona={persona} 
+                            getMoodEmoji={getMoodEmoji} 
+                        />
                     ))}
                 </AnimatePresence>
 

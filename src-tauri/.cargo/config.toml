@@ -1,0 +1,7 @@
+[build]
+target = "x86_64-pc-windows-gnu"
+target-dir = "D:\\cargo-target\\nizhal"
+
+[target.x86_64-pc-windows-gnu]
+linker = "D:\\tools\\mingw64\\bin\\gcc.exe"
+ar = "D:\\tools\\mingw64\\bin\\ar.exe"

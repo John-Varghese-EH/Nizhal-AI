@@ -1,6 +1,6 @@
-import { BrowserWindow } from 'electron';
-import Stripe from 'stripe';
-import Razorpay from 'razorpay';
+// Payment processing - uses Tauri shell plugin or frontend Stripe.js
+// BrowserWindow functionality handled by Tauri window API
+// Stripe/Razorpay SDKs run server-side or via Stripe.js in browser
 
 export class PaymentService {
     constructor() {

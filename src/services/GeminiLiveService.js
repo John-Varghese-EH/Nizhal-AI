@@ -11,6 +11,7 @@
  */
 
 import { voiceTools } from './VoiceTools.js';
+import assistant from '../assistant/index.js';
 
 const MODEL_NAME = 'gemini-2.0-flash-exp';
 const INPUT_SAMPLE_RATE = 16000;
@@ -313,11 +314,6 @@ class GeminiLiveService {
 
                 case 'join_livekit_room':
                     const roomName = args.roomName || 'john-personal';
-                    // Dynamic import to avoid circular dependency if possible, or assume global assistant
-                    // Since assistant is imported in App.jsx, we can access it if we export it globally or import here
-                    // We will import 'assistant' at top of file, or use window object if attached
-                    // Better: Import it.
-                    const { default: assistant } = await import('../assistant/index.js');
                     await assistant.roomManager.connect(roomName);
                     result = { success: true, message: `Joined voice room: ${roomName}` };
                     break;

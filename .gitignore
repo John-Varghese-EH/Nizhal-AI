@@ -1,6 +1,40 @@
 node_modules
-#Reference
-PAYMENT.md
-/dist-electron/win-unpacked
+dist
+dist-electron
+
+# Tauri
+src-tauri/target
+src-tauri/gen
+
+# Environment
 .env
+
+# IDE
+.vscode
+.idea
+
+# Logs
+*.log
+
+# Build artifacts
+*.exe
+*.dmg
+*.AppImage
+*.deb
+
+# Reference docs (private)
 /Reference
+PAYMENT.md
+
+# AI Agents & Automation
+.agent/
+.agent**
+claude.md
+skills/
+.cline/
+.cursor/
+.cursorrules
+.gemini/
+brain/
+agent_logs/
+*.agent

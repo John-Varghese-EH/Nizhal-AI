@@ -63,26 +63,26 @@ export class SettingsUI {
      * Setup settings panel
      */
     async setupSettingsPanel() {
-        // Get settings manager from main process
-        const settingsSchema = await window.electronAPI.invoke('settings:getSchema');
+        // Get settings manager from Tauri backend
+        const settingsSchema = await window.nizhal?.settings?.getSchema?.() || {};
         
         this.settingsPanel = new SettingsPanel(null, this.container);
         
         // Override settings manager methods to use IPC
         this.settingsPanel.settingsManager = {
-            get: (category, key, defaultValue) => window.electronAPI.invoke('settings:get', category, key, defaultValue),
-            getCategory: (category) => window.electronAPI.invoke('settings:getCategory', category),
-            set: (category, key, value) => window.electronAPI.invoke('settings:set', category, key, value),
-            setCategory: (category, settings) => window.electronAPI.invoke('settings:setCategory', category, settings),
+            get: (category, key, defaultValue) => window.nizhal?.settings?.get?.(category, key) ?? defaultValue,
+            getCategory: (category) => window.nizhal?.settings?.getCategory?.(category),
+            set: (category, key, value) => window.nizhal?.settings?.set?.(category, key, value),
+            setCategory: (category, settings) => window.nizhal?.settings?.setCategory?.(category, settings),
             getSettingsSchema: () => settingsSchema,
-            getAllSettings: () => window.electronAPI.invoke('settings:getAll'),
-            exportSettings: () => window.electronAPI.invoke('settings:export'),
-            importSettings: (data) => window.electronAPI.invoke('settings:import', data),
-            reset: (category, key) => window.electronAPI.invoke('settings:reset', category, key),
-            resetCategory: (category) => window.electronAPI.invoke('settings:resetCategory', category),
-            resetAll: () => window.electronAPI.invoke('settings:resetAll'),
-            searchSettings: (query) => window.electronAPI.invoke('settings:search', query),
-            getSettingsSummary: () => window.electronAPI.invoke('settings:getSummary'),
+            getAllSettings: () => window.nizhal?.settings?.getAll?.(),
+            exportSettings: () => window.nizhal?.settings?.export?.(),
+            importSettings: (data) => window.nizhal?.settings?.import?.(data),
+            reset: (category, key) => window.nizhal?.settings?.reset?.(category),
+            resetCategory: (category) => window.nizhal?.settings?.reset?.(category),
+            resetAll: () => window.nizhal?.settings?.reset?.(),
+            searchSettings: (query) => window.nizhal?.settings?.search?.(query),
+            getSettingsSummary: () => window.nizhal?.settings?.getSummary?.(),
             categories: {
                 general: { name: 'General', description: 'Basic application settings', icon: '⚙️', order: 1 },
                 voice: { name: 'Voice & Audio', description: 'Voice synthesis and recognition settings', icon: '🎤', order: 2 },
@@ -106,8 +106,8 @@ export class SettingsUI {
      * Setup event listeners
      */
     setupEventListeners() {
-        // Listen for setting changes from main process
-        window.electronAPI.on('setting-changed', (event, data) => {
+        // Listen for setting changes from Tauri backend
+        window.nizhal?.on?.('setting-changed', (data) => {
             this.handleSettingChange(data);
         });
         
@@ -236,21 +236,21 @@ export class SettingsUI {
      * Get current settings value
      */
     async getSetting(category, key) {
-        return await window.electronAPI.invoke('settings:get', category, key);
+        return await window.nizhal?.settings?.get?.(category, key);
     }
     
     /**
      * Set setting value
      */
     async setSetting(category, key, value) {
-        return await window.electronAPI.invoke('settings:set', category, key, value);
+        return await window.nizhal?.settings?.set?.(category, key, value);
     }
     
     /**
      * Get all settings
      */
     async getAllSettings() {
-        return await window.electronAPI.invoke('settings:getAll');
+        return await window.nizhal?.settings?.getAll?.();
     }
     
     /**
@@ -276,11 +276,11 @@ export class SettingsUI {
      */
     async resetSettings(category = null, key = null) {
         if (category && key) {
-            await window.electronAPI.invoke('settings:reset', category, key);
+            await window.nizhal?.settings?.reset?.(category);
         } else if (category) {
-            await window.electronAPI.invoke('settings:resetCategory', category);
+            await window.nizhal?.settings?.reset?.(category);
         } else {
-            await window.electronAPI.invoke('settings:resetAll');
+            await window.nizhal?.settings?.reset?.();
         }
         
         // Reload settings if panel is visible

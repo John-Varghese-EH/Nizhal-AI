@@ -344,6 +344,14 @@ const CharacterApp = () => {
         // Allow larger scale in screensaver mode
         const maxScale = isScreensaver ? 3.0 : 1.5;
 
+        // Virtual Screen Position approximation
+        window.nizhalCharacterScreenPos = {
+            x: width / 2 - 150,
+            y: height / 2 + 100, // roughly where feet would land relative to center
+            width: 300,
+            height: height / 2, // virtual collision height
+        };
+
         return {
             scale: Math.max(0.8, Math.min(maxScale, scaleFactor)), // Smaller scale to fit full body
             position: [0, positionY, 0], // Lower position
@@ -933,6 +941,14 @@ const CharacterApp = () => {
                                         expression={currentEmotion === 'thinking' ? 'thinking' : currentEmotion}
                                         enableLookAt={settings.mouseTracking}
                                         enableBlink={true}
+                                        onHoverIn={() => {
+                                            window.nizhal?.character?.setClickThrough?.(false);
+                                            setIsClickThrough(false);
+                                        }}
+                                        onHoverOut={() => {
+                                            window.nizhal?.character?.setClickThrough?.(true);
+                                            setIsClickThrough(true);
+                                        }}
                                         onLoad={() => {
                                             console.log('VRM loaded successfully:', currentCharacter.name);
                                             setVrmLoaded(true);
