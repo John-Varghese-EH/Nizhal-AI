@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Mic, MicOff, Phone, PhoneOff, Video, VideoOff, Zap } from 'lucide-react';
 import { LiveKitVoiceButton } from './LiveKitVoiceButton';
 import { livekitVoiceService } from '../services/LiveKitVoiceService';
 
@@ -46,28 +47,17 @@ const ChatView = ({ persona, personalityState }) => {
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
 
-    // Sync LiveKit voice status with global system
+    // Subscribe to real-time emotion updates from voice agent
     useEffect(() => {
-        // When voice status changes, notify the system
-        if (window.nizhalAI?.voiceManager) {
-            const connected = (voiceStatus === 'connected');
-            window.nizhalAI.voiceManager.setLivekitStatus(connected);
-            console.log('[ChatView] LiveKit status synced:', connected);
-        }
-
-        // Subscribe to real-time emotion updates from voice agent
         livekitVoiceService.onEmotion = (emotion) => {
-            console.log('[ChatView] Received emotion from voice:', emotion);
             setLiveKitEmotion(emotion);
-
-            // Reset after 5 seconds
             setTimeout(() => setLiveKitEmotion(null), 5000);
         };
 
         return () => {
             livekitVoiceService.onEmotion = null;
         };
-    }, [voiceStatus]);
+    }, []);
 
     useEffect(() => {
         loadHistory();
@@ -275,14 +265,41 @@ ${voiceStatus === 'connected' ? '✅ LiveKit connected' : '⚠️ LiveKit not co
 
     return (
         <div className="h-full flex flex-col">
+            {/* Chat Header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 bg-black/20 backdrop-blur-sm">
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500/30 to-indigo-500/30 flex items-center justify-center text-sm border border-white/10">
+                        {getMoodEmoji()}
+                    </div>
+                    <div>
+                        <h2 className="text-sm font-semibold text-white/90">{persona?.name || 'Nizhal AI'}</h2>
+                        <span className="text-[10px] text-white/40 font-mono uppercase tracking-wider">
+                            {voiceStatus === 'connected' ? '● Voice Active' : 'Text Mode'}
+                        </span>
+                    </div>
+                </div>
+                <div className="flex items-center gap-1">
+                    <div className={`w-1.5 h-1.5 rounded-full ${voiceStatus === 'connected' ? 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)] animate-pulse' : 'bg-white/20'}`} />
+                </div>
+            </div>
+
+            {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {messages.length === 0 && (
+                    <div className="flex flex-col items-center justify-center h-full text-white/30 text-sm gap-2">
+                        <span className="text-3xl">💬</span>
+                        <span>Start a conversation</span>
+                        <span className="text-xs text-white/20">Type a message or use /help for commands</span>
+                    </div>
+                )}
+
                 <AnimatePresence initial={false}>
                     {messages.map((message, index) => (
-                        <MessageBubble 
-                            key={index} 
-                            message={message} 
-                            persona={persona} 
-                            getMoodEmoji={getMoodEmoji} 
+                        <MessageBubble
+                            key={`${message.timestamp}-${index}`}
+                            message={message}
+                            persona={persona}
+                            getMoodEmoji={getMoodEmoji}
                         />
                     ))}
                 </AnimatePresence>
@@ -293,17 +310,17 @@ ${voiceStatus === 'connected' ? '✅ LiveKit connected' : '⚠️ LiveKit not co
                         animate={{ opacity: 1 }}
                         className="flex justify-start"
                     >
-                        <div className="bg-white/10 rounded-2xl rounded-bl-sm px-4 py-3">
-                            <div className="flex gap-1">
+                        <div className="glass-panel rounded-2xl rounded-bl-sm px-4 py-3">
+                            <div className="flex gap-1.5">
                                 {[0, 1, 2].map((i) => (
                                     <motion.div
                                         key={i}
-                                        className="w-2 h-2 bg-indigo-400 rounded-full"
-                                        animate={{ y: [0, -8, 0] }}
+                                        className="w-2 h-2 bg-cyan-400 rounded-full"
+                                        animate={{ y: [0, -6, 0] }}
                                         transition={{
-                                            duration: 0.6,
+                                            duration: 0.5,
                                             repeat: Infinity,
-                                            delay: i * 0.1
+                                            delay: i * 0.12
                                         }}
                                     />
                                 ))}
@@ -315,17 +332,8 @@ ${voiceStatus === 'connected' ? '✅ LiveKit connected' : '⚠️ LiveKit not co
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* Voice & Camera Controls */}
-            <div className="mx-4 mt-2 p-3 bg-white/5 rounded-xl border border-white/10 flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-white/50 uppercase tracking-wider">Voice & Camera</span>
-                    {/* Connection Status Indicator */}
-                    <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${voiceStatus === 'connected' ? 'bg-green-500 animate-pulse' : 'bg-red-500/50'}`} />
-                        <span className="text-xs text-white/40">{voiceStatus === 'connected' ? 'Connected' : 'Disconnected'}</span>
-                    </div>
-                </div>
-
+            {/* Compact Voice Toolbar + LiveKit (hidden but functional) */}
+            <div className="hidden">
                 <LiveKitVoiceButton
                     userName={persona?.name || 'User'}
                     onStatusChange={(status) => setVoiceStatus(status)}
@@ -333,36 +341,61 @@ ${voiceStatus === 'connected' ? '✅ LiveKit connected' : '⚠️ LiveKit not co
                     cameraEnabled={cameraEnabled}
                     onCameraToggle={setCameraEnabled}
                 />
-
-
             </div>
 
-            <form onSubmit={handleSubmit} className="p-4 border-t border-white/5">
-                <div className="flex gap-2">
-                    <input
-                        ref={inputRef}
-                        type="text"
-                        value={inputValue}
-                        onChange={(e) => setInputValue(e.target.value)}
-                        placeholder={inputValue.startsWith('/') ? 'Type /help for commands' : `Message ${persona?.name || 'AI'}...`}
-                        disabled={isLoading}
-                        className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/30 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30 transition-all disabled:opacity-50"
-                    />
-                    <motion.button
-                        type="submit"
-                        disabled={isLoading || !inputValue.trim()}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        className="px-4 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-white/10 rounded-xl transition-colors disabled:cursor-not-allowed"
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+            {/* Input Area */}
+            <div className="p-3 border-t border-white/5 bg-black/20 backdrop-blur-sm">
+                <form onSubmit={handleSubmit}>
+                    <div className="flex gap-2 items-center">
+                        <div className="flex-1 relative">
+                            <input
+                                ref={inputRef}
+                                type="text"
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
+                                placeholder={inputValue.startsWith('/') ? 'Type /help for commands' : `Message ${persona?.name || 'AI'}...`}
+                                disabled={isLoading}
+                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-3 text-sm text-white placeholder-white/25 focus:outline-none focus:border-cyan-500/40 focus:bg-white/[0.07] transition-all disabled:opacity-50"
                             />
-                        </svg>
-                    </motion.button>
-                </div>
-            </form>
+                        </div>
+
+                        {/* Voice toggle inline */}
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (voiceStatus === 'connected') {
+                                    // Already handled by LiveKitVoiceButton
+                                } else {
+                                    // Try connecting via the hidden LiveKit button
+                                    const btn = document.querySelector('.livekit-voice-controls button');
+                                    if (btn) btn.click();
+                                }
+                            }}
+                            className={`p-3 rounded-2xl transition-all shrink-0 ${
+                                voiceStatus === 'connected'
+                                    ? 'bg-green-500/20 text-green-400 border border-green-500/30 shadow-[0_0_12px_rgba(74,222,128,0.15)]'
+                                    : 'bg-white/5 text-white/40 border border-white/10 hover:bg-white/10 hover:text-white/70'
+                            }`}
+                            title={voiceStatus === 'connected' ? 'Voice Connected' : 'Connect Voice'}
+                        >
+                            {voiceStatus === 'connected' ? <Mic size={18} /> : <MicOff size={18} />}
+                        </button>
+
+                        <motion.button
+                            type="submit"
+                            disabled={isLoading || !inputValue.trim()}
+                            whileTap={{ scale: 0.93 }}
+                            className="p-3 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 disabled:from-white/10 disabled:to-white/10 rounded-2xl transition-all disabled:cursor-not-allowed shrink-0 shadow-lg shadow-cyan-500/10 disabled:shadow-none"
+                        >
+                            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                                />
+                            </svg>
+                        </motion.button>
+                    </div>
+                </form>
+            </div>
         </div>
     );
 };

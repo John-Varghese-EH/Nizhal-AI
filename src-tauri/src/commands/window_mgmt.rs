@@ -13,7 +13,7 @@ pub struct WindowState {
     pub y: i32,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Position {
     pub x: i32,
     pub y: i32,

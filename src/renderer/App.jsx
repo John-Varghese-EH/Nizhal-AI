@@ -31,10 +31,6 @@ const App = () => {
     const [isUserSpeaking, setIsUserSpeaking] = useState(false);
     const [isCameraEnabled, setIsCameraEnabled] = useState(false);
 
-    // Analysers (kept for future visualizer integration)
-    const [analyserIn, setAnalyserIn] = useState(null);
-    const [analyserOut, setAnalyserOut] = useState(null);
-
     useEffect(() => {
         initializeApp();
         assistant.start();
@@ -59,7 +55,7 @@ const App = () => {
             window.addEventListener('resize', checkWindowState);
         }
 
-        const interval = setInterval(checkWindowState, 1000);
+        const interval = setInterval(checkWindowState, 3000);
 
         const unsubscribePersona = window.nizhal?.onPersonaChange?.(setActivePersona);
         const unsubscribeMood = window.nizhal?.onMoodChange?.((mood) => setPersonalityState(prev => ({ ...prev, mood })));
@@ -95,6 +91,7 @@ const App = () => {
             // Launch the transparent avatar window
             if (window.nizhal?.character?.create) {
                 await window.nizhal.character.create();
+                await window.nizhal.character.show();
             }
         } catch (error) {
             console.error('Failed to initialize:', error);
@@ -115,9 +112,6 @@ const App = () => {
         if (success) {
             setIsConnected(true);
             setIsListening(true);
-            const { analyserIn, analyserOut } = geminiLiveService.getAnalysers();
-            setAnalyserIn(analyserIn);
-            setAnalyserOut(analyserOut);
         }
     }, [privacyMode, activePersona]);
 
@@ -135,7 +129,48 @@ const App = () => {
         }
     }, [isConnected, isListening]);
 
-    if (isLoading) return <div className="h-full w-full flex items-center justify-center bg-black text-white">Loading...</div>;
+    if (isLoading) return (
+        <div className="h-full w-full flex flex-col items-center justify-center bg-[#030711] text-white gap-6">
+            {/* Pulsing Logo */}
+            <motion.div
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.6, ease: 'easeOut' }}
+                className="relative"
+            >
+                <motion.div
+                    animate={{ opacity: [0.3, 0.6, 0.3], scale: [1, 1.15, 1] }}
+                    transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+                    className="absolute inset-0 rounded-full bg-cyan-500/20 blur-2xl"
+                    style={{ width: 120, height: 120, margin: 'auto', top: -10, left: -10, right: -10, bottom: -10 }}
+                />
+                <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-cyan-500/20 to-indigo-600/20 border border-white/10 flex items-center justify-center backdrop-blur-xl shadow-2xl">
+                    <span className="text-4xl font-thin tracking-[0.15em] bg-gradient-to-br from-white via-cyan-200 to-indigo-300 bg-clip-text text-transparent select-none">N</span>
+                </div>
+            </motion.div>
+            <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="flex flex-col items-center gap-2"
+            >
+                <h1 className="text-2xl font-thin tracking-[0.25em] text-white/80">NIZHAL</h1>
+                <div className="flex items-center gap-2">
+                    <motion.div
+                        animate={{ opacity: [0.3, 1, 0.3] }}
+                        transition={{ duration: 1.5, repeat: Infinity }}
+                        className="w-1 h-1 rounded-full bg-cyan-400"
+                    />
+                    <span className="text-[10px] text-white/30 font-mono tracking-[0.3em] uppercase">Initializing</span>
+                    <motion.div
+                        animate={{ opacity: [0.3, 1, 0.3] }}
+                        transition={{ duration: 1.5, repeat: Infinity, delay: 0.5 }}
+                        className="w-1 h-1 rounded-full bg-cyan-400"
+                    />
+                </div>
+            </motion.div>
+        </div>
+    );
     if (showOnboarding) return <MagicSetup onComplete={() => setShowOnboarding(false)} />;
 
     const isCompact = windowMode === 'compact';

@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    MessageSquare, Activity, Settings, Layout,
-    Wifi, Shield, ShieldOff, Mic, MicOff,
-    Video, VideoOff, Power, Menu, X, Phone,
-    Key, Eye, EyeOff, Lock, Plus, Trash2, Edit2, Save
+    MessageSquare, Activity, Settings,
+    Shield, ShieldOff, Mic, MicOff,
+    Video, VideoOff, X, Phone
 } from 'lucide-react';
 import WindowControls from '../WindowControls';
 import CameraFeed from '../CameraFeed';
@@ -136,36 +135,45 @@ const AppLayout = ({
                 ))}
             </nav>
 
-            <div className="p-6 border-t border-white/5 bg-black/20 backdrop-blur-md">
-                <div className="grid grid-cols-3 gap-3">
+            <div className="p-5 border-t border-white/5 bg-black/20 backdrop-blur-md space-y-3">
+                {/* Quick Actions with Labels */}
+                <div className="grid grid-cols-2 gap-2">
                     <button
                         onClick={onMirrorToggle}
-                        className="p-3.5 rounded-2xl flex items-center justify-center transition-all bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white border border-transparent hover:border-white/10"
-                        title="Mirror Android"
+                        className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl transition-all bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white border border-transparent hover:border-white/10 text-left"
                     >
-                        <Phone size={18} />
+                        <Phone size={16} />
+                        <span className="text-xs font-medium">Mirror</span>
                     </button>
                     <button
                         onClick={onCameraToggle}
-                        className={`p-3.5 rounded-2xl flex items-center justify-center transition-all ${isCameraEnabled ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/20' : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white border border-transparent hover:border-white/10'}`}
-                        title="Toggle Camera"
+                        className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl transition-all text-left ${isCameraEnabled ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/25' : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white border border-transparent hover:border-white/10'}`}
                     >
-                        {isCameraEnabled ? <Video size={18} /> : <VideoOff size={18} />}
+                        {isCameraEnabled ? <Video size={16} /> : <VideoOff size={16} />}
+                        <span className="text-xs font-medium">Camera</span>
                     </button>
                     <button
                         onClick={onMicToggle}
-                        className={`p-3.5 rounded-2xl flex items-center justify-center transition-all ${isListening ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 animate-pulse' : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white border border-transparent hover:border-white/10'}`}
-                        title="Toggle Mic"
+                        className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl transition-all text-left ${isListening ? 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/25' : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white border border-transparent hover:border-white/10'}`}
                     >
-                        {isListening ? <Mic size={18} /> : <MicOff size={18} />}
+                        {isListening ? <Mic size={16} /> : <MicOff size={16} />}
+                        <span className="text-xs font-medium">{isListening ? 'Listening' : 'Mic Off'}</span>
                     </button>
                     <button
                         onClick={onPrivacyToggle}
-                        className={`p-3.5 rounded-2xl flex items-center justify-center transition-all ${privacyMode ? 'bg-green-500/20 text-green-400 border border-green-500/30 shadow-[0_0_15px_rgba(34,197,94,0.1)]' : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white border border-transparent hover:border-white/10'}`}
-                        title="Privacy Mode"
+                        className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl transition-all text-left ${privacyMode ? 'bg-green-500/15 text-green-400 border border-green-500/25' : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white border border-transparent hover:border-white/10'}`}
                     >
-                        {privacyMode ? <Shield size={18} /> : <ShieldOff size={18} />}
+                        {privacyMode ? <Shield size={16} /> : <ShieldOff size={16} />}
+                        <span className="text-xs font-medium">{privacyMode ? 'Private' : 'Privacy'}</span>
                     </button>
+                </div>
+
+                {/* Connection indicator */}
+                <div className="flex items-center justify-center gap-2 pt-1">
+                    <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-cyan-400 shadow-[0_0_6px_rgba(6,182,212,0.6)]' : 'bg-slate-600'}`} />
+                    <span className="text-[10px] text-slate-500 font-mono tracking-wider uppercase">
+                        {isConnected ? 'AI Connected' : 'Offline'}
+                    </span>
                 </div>
             </div>
         </div>

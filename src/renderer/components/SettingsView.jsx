@@ -977,11 +977,11 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
                                                 whileTap={{ scale: 0.95 }}
                                                 onClick={async () => {
                                                     try {
-                                                        const { success, error } = toast;
                                                         await window.nizhal?.livekit?.restartAgent?.();
-                                                        success('Voice Agent restart triggered');
+                                                        toast.success('Voice Agent restart triggered');
                                                     } catch (err) {
                                                         console.error(err);
+                                                        toast.error('Failed to restart Voice Agent');
                                                     }
                                                 }}
                                                 className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs text-white flex items-center gap-1.5"

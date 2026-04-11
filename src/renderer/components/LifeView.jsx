@@ -122,7 +122,24 @@ const LifeView = () => {
     );
 
     if (loading && !lifeData.weather) {
-        return <div className="p-10 text-center text-white/30 animate-pulse">Syncing Life Interface...</div>;
+        return (
+            <div className="h-full flex flex-col overflow-hidden">
+                <div className="p-6 pb-2">
+                    <div className="loading-shimmer h-8 w-48 mb-6 rounded-lg" />
+                    <div className="flex gap-2 pb-1">
+                        {[1, 2, 3, 4, 5, 6].map(i => (
+                            <div key={i} className="loading-shimmer h-10 w-24 rounded-xl" />
+                        ))}
+                    </div>
+                </div>
+                <div className="flex-1 p-6 pt-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="loading-shimmer h-48 rounded-3xl" />
+                    <div className="loading-shimmer h-48 rounded-3xl" />
+                    <div className="loading-shimmer h-36 rounded-3xl" />
+                    <div className="loading-shimmer h-36 rounded-3xl" />
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -160,31 +177,42 @@ const LifeView = () => {
                             className="grid grid-cols-1 lg:grid-cols-2 gap-6"
                         >
                             {/* Weather Card */}
-                            <div className="p-6 rounded-3xl bg-gradient-to-br from-white/5 to-white/0 border border-white/10 shadow-xl">
-                                <div className="flex justify-between items-start mb-6">
-                                    <div>
-
-                                        <h3 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
-                                            {lifeData.weather?.temp ? (tempUnit === 'F' ? Math.round(lifeData.weather.temp * 9 / 5 + 32) : lifeData.weather.temp) : '--'}°{tempUnit}
-                                        </h3>
-                                        <p className="text-cyan-400 font-medium capitalize mt-1">
-                                            {lifeData.weather?.description ?? 'Clear Sky'}
-                                        </p>
+                            <div className="p-6 rounded-3xl bg-gradient-to-br from-white/5 to-white/0 border border-white/10 shadow-xl relative overflow-hidden group">
+                                {lifeData.weather ? (
+                                    <>
+                                        <div className="flex justify-between items-start mb-6">
+                                            <div>
+                                                <h3 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
+                                                    {tempUnit === 'F' ? Math.round(lifeData.weather.temp * 9 / 5 + 32) : lifeData.weather.temp}°{tempUnit}
+                                                </h3>
+                                                <p className="text-cyan-400 font-medium capitalize mt-1">
+                                                    {lifeData.weather.description}
+                                                </p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-lg font-medium text-white">{lifeData.weather.city}</p>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-xs text-slate-500 uppercase">Humidity</span>
+                                                <span className="text-lg text-white font-light">{lifeData.weather.humidity}%</span>
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-xs text-slate-500 uppercase">Wind</span>
+                                                <span className="text-lg text-white font-light">{lifeData.weather.wind} km/h</span>
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-center gap-3">
+                                        <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center text-xl">🌤️</div>
+                                        <div>
+                                            <p className="text-sm font-medium text-white/70">No Weather Data</p>
+                                            <p className="text-xs text-white/40 mt-1">Set your location in Settings to see local weather.</p>
+                                        </div>
                                     </div>
-                                    <div className="text-right">
-                                        <p className="text-lg font-medium text-white">{lifeData.weather?.city ?? 'Local'}</p>
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
-                                    <div className="flex flex-col gap-1">
-                                        <span className="text-xs text-slate-500 uppercase">Humidity</span>
-                                        <span className="text-lg text-white font-light">{lifeData.weather?.humidity ?? 0}%</span>
-                                    </div>
-                                    <div className="flex flex-col gap-1">
-                                        <span className="text-xs text-slate-500 uppercase">Wind</span>
-                                        <span className="text-lg text-white font-light">{lifeData.weather?.wind ?? 0} km/h</span>
-                                    </div>
-                                </div>
+                                )}
                             </div>
 
                             {/* Calendar Card */}

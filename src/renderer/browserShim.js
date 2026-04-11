@@ -4,11 +4,10 @@
  */
 
 import tauriAPI from '../lib/tauri.js';
+import { isTauri } from '@tauri-apps/api/core';
 
 // Check if running in Tauri
-const isTauri = !!(window && window.__TAURI_INTERNALS__);
-
-if (isTauri) {
+if (isTauri()) {
     // Running in Tauri — use native APIs
     window.nizhal = tauriAPI;
     console.log('🦀 Running in Tauri mode — native APIs active');

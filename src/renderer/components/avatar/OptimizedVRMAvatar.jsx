@@ -46,6 +46,8 @@ const OptimizedVRMModel = React.memo(({
     enableBlink = true,
     expression = 'neutral',
     isSpeaking = false,
+    onHoverIn,
+    onHoverOut,
     onLoad,
     onError
 }) => {
