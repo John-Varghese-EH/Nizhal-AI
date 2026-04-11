@@ -5,7 +5,7 @@
 
 export class ContextManager {
     constructor(store) {
-        // We inject the optional persistent store (electron-store wrapper)
+        // We inject the optional persistent store
         this.store = store;
 
         this.memory = {

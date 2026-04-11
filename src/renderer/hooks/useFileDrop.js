@@ -39,7 +39,7 @@ export const useFileDrop = (onFileDrop) => {
                 name: file.name,
                 size: file.size,
                 type: file.type,
-                path: file.path // Electron provides full path
+                path: file.path // Native backend provides full path
             }));
             onFileDrop(fileInfo);
         }

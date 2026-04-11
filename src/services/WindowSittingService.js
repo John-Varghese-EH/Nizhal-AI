@@ -1,6 +1,6 @@
 /**
  * WindowSittingService - Detects windows for avatar to sit on
- * Uses Electron's desktopCapturer and native window APIs
+ * Uses Tauri backend commands and native window APIs
  */
 export class WindowSittingService {
     constructor() {
@@ -10,8 +10,8 @@ export class WindowSittingService {
         this.refreshInterval = null;
         this.onWindowsUpdate = null;
 
-        // Platform detection
-        this.platform = process?.platform || 'unknown';
+        // Platform detection (Tauri uses backend for this)
+        this.platform = 'unknown';
     }
 
     /**
@@ -41,8 +41,8 @@ export class WindowSittingService {
         if (!this.isEnabled) return;
 
         try {
-            // Use Electron IPC if available
-            if (window.nizhal?.system?.getWindows) {
+            // Use Tauri backend if available
+            if (window.__TAURI_INTERNALS__ && window.nizhal?.system?.getWindows) {
                 this.windows = await window.nizhal.system.getWindows();
             } else {
                 // Fallback: mock windows for development
@@ -72,8 +72,8 @@ export class WindowSittingService {
             position: 'bottom'
         };
 
-        // Try to get actual taskbar from Electron
-        if (window.nizhal?.system?.getTaskbar) {
+        // Try to get actual taskbar from Tauri backend
+        if (window.__TAURI_INTERNALS__ && window.nizhal?.system?.getTaskbar) {
             window.nizhal.system.getTaskbar().then(taskbar => {
                 if (taskbar) {
                     this.taskbarBounds = taskbar;

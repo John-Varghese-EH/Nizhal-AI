@@ -228,7 +228,7 @@ In-app store for purchasing premium personas, voice packs, and visual themes.
 4. **No Telemetry**: No usage tracking without explicit consent
 
 ### Security Requirements
-- [ ] Sandboxed renderer processes (Electron best practices)
+- [ ] Sandboxed frontend processes (Tauri best practices)
 - [ ] CSP (Content Security Policy) for web content
 - [ ] No eval() or remote code execution
 - [ ] Signed and notarized builds (macOS)
@@ -294,7 +294,7 @@ In-app store for purchasing premium personas, voice packs, and visual themes.
 
 ## 🔧 Technical Constraints
 
-- **Platforms**: Windows, macOS, Linux (Electron 33.x)
+- **Platforms**: Windows, macOS, Linux (Tauri v2)
 - **Minimum System Requirements**:
   - 4GB RAM
   - 500MB storage

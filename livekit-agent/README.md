@@ -100,7 +100,7 @@ This agent can be integrated with Nizhal AI's personality system by:
 
 Example integration:
 ```javascript
-// In Nizhal AI Electron app
+// In Nizhal AI Tauri app
 const { spawn } = require('child_process');
 
 function startLiveKitAgent(personality) {

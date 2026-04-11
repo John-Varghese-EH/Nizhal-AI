@@ -54,7 +54,7 @@ class ClipboardWatcherService {
      */
     async readClipboard() {
         try {
-            // Try Electron API first
+            // Try Tauri plugin API first
             if (window.nizhal?.clipboard?.read) {
                 return await window.nizhal.clipboard.read();
             }
@@ -75,7 +75,7 @@ class ClipboardWatcherService {
      */
     async writeClipboard(text) {
         try {
-            // Try Electron API first
+            // Try Tauri API first
             if (window.nizhal?.clipboard?.write) {
                 await window.nizhal.clipboard.write(text);
                 return true;

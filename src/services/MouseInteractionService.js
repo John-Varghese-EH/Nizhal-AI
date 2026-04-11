@@ -3,7 +3,7 @@
  * 
  * Tracks global mouse position and provides interaction triggers for VRM avatar.
  * Features:
- * - Global cursor position tracking (across entire screen via Electron)
+ * - Global cursor position tracking (across entire screen via Tauri)
  * - Local cursor position (within app window)
  * - Proximity detection for hand grabbing
  * - Head/eye follow calculations
@@ -59,7 +59,7 @@ export class MouseInteractionService {
 
         // Bind methods
         this._onMouseMove = this._onMouseMove.bind(this);
-        this._onElectronMouseUpdate = this._onElectronMouseUpdate.bind(this);
+        this._onGlobalMouseUpdate = this._onGlobalMouseUpdate.bind(this);
     }
 
     /**
@@ -69,7 +69,7 @@ export class MouseInteractionService {
     initialize(options = {}) {
         const {
             windowBounds = this.windowBounds,
-            useElectronTracking = true
+            useGlobalTracking = true
         } = options;
 
         this.windowBounds = windowBounds;
@@ -79,13 +79,16 @@ export class MouseInteractionService {
             window.addEventListener('mousemove', this._onMouseMove);
         }
 
-        // Start Electron global mouse tracking if available
-        if (useElectronTracking && window.nizhal?.on) {
-            window.nizhal.on('mouse:position', this._onElectronMouseUpdate);
-            // Request mouse tracking from main process
-            window.nizhal.invoke('mouse:startTracking').catch(() => {
-                console.log('[MouseInteraction] Electron mouse tracking not available');
-            });
+        // Start global mouse tracking if available
+        if (useGlobalTracking && window.__TAURI_INTERNALS__) {
+            try {
+                // In Tauri, backend sends events
+                import('@tauri-apps/api/event').then(({ listen }) => {
+                    listen('mouse-position', (event) => this._onGlobalMouseUpdate(event.payload));
+                });
+            } catch (e) {
+                console.log('[MouseInteraction] Global mouse tracking not available');
+            }
         }
 
         this.isTracking = true;
@@ -113,9 +116,9 @@ export class MouseInteractionService {
     }
 
     /**
-     * Handle Electron global mouse position updates
+     * Handle global mouse position updates
      */
-    _onElectronMouseUpdate(data) {
+    _onGlobalMouseUpdate(data) {
         const { x, y, screenWidth, screenHeight } = data;
 
         this.screenPosition.x = x;
@@ -339,8 +342,10 @@ export class MouseInteractionService {
             window.removeEventListener('mousemove', this._onMouseMove);
         }
 
-        if (window.nizhal?.invoke) {
-            window.nizhal.invoke('mouse:stopTracking').catch(() => { });
+        if (window.__TAURI_INTERNALS__) {
+            try {
+                // Unsubscribe if needed
+            } catch (e) {}
         }
 
         this.isTracking = false;

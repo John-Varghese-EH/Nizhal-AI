@@ -9,7 +9,7 @@ export class ContextService {
         if (this.isMonitoring) return;
         this.isMonitoring = true;
 
-        // In a real Electron app with native node modules active-win could be used.
+        // In a real desktop app with native modules active-win could be used.
         // For this implementation, we will simulate or use available clipboard/focus APIs.
         // Since we are in the renderer, we rely on the implementation capabilities.
         // Real implementation would require a native module in the main process communicating via IPC.

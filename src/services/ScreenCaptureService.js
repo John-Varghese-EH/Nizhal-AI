@@ -33,7 +33,7 @@ class ScreenCaptureService {
      */
     async captureScreen() {
         try {
-            // Use Electron's desktopCapturer via IPC
+            // Use Tauri backend via IPC
             const sources = await window.nizhal?.screen?.getSources?.('screen');
 
             if (!sources || sources.length === 0) {

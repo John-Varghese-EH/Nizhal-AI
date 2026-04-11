@@ -304,7 +304,7 @@ const CharacterApp = () => {
         // Initial check immediately
         updateSize();
 
-        // Polling checks to ensure we catch the final window size after Electron startup/maximize
+        // Polling checks to ensure we catch the final window size after App startup/maximize
         const timers = [
             setTimeout(updateSize, 100),
             setTimeout(updateSize, 500),

@@ -83,7 +83,7 @@ body,
   overflow: hidden;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background: transparent;
-  /* Electron transparency */
+  /* App transparency */
   color: var(--text-main);
   user-select: none;
   -webkit-font-smoothing: antialiased;

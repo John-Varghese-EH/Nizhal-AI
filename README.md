@@ -8,7 +8,7 @@
   
   **"More than just an assistant. A friend who lives right on your desktop, understands your emotions, and grows with you every day-now faster and lighter than ever."**
 
-  [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue.svg?style=for-the-badge&logo=electron)](https://tauri.app)
+  [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue.svg?style=for-the-badge&logo=windows)](https://tauri.app)
   [![Status](https://img.shields.io/badge/status-Active%20Development-brightgreen.svg?style=for-the-badge&logo=rocket)]()
   [![Tauri](https://img.shields.io/badge/tauri-v2.0-FFC131.svg?style=for-the-badge&logo=tauri)](https://tauri.app)
   [![Rust](https://img.shields.io/badge/rust-backend-orange.svg?style=for-the-badge&logo=rust)](https://rust-lang.org)

@@ -169,7 +169,7 @@ class TaskBoardService {
     }
 
     /**
-     * Load tasks from electron-store via IPC
+     * Load tasks from local store
      */
     async _loadFromStorage() {
         try {

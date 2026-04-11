@@ -28,7 +28,7 @@
 
 ```mermaid
 graph TB
-    subgraph "Electron Main Process"
+    subgraph "Tauri Core Process"
         Main[main.js]
         WindowMgr[MultiWindowManager]
         Bridge[SystemBridge]
@@ -88,7 +88,7 @@ graph TB
 
 ### Multi-Process Architecture
 
-Nizhal AI uses Electron's multi-process architecture:
+Nizhal AI uses Tauri's multi-process architecture:
 
 **Main Process** (`main.js`)
 - Window management
@@ -110,7 +110,7 @@ Nizhal AI uses Electron's multi-process architecture:
 ## 🛠️ Technology Stack
 
 ### Core Framework
-- **Electron 33.x**: Desktop application framework
+- **Tauri v2**: Desktop application framework
 - **Node.js 20+**: JavaScript runtime
 - **Vite 6.x**: Build tool and dev server
 
@@ -143,7 +143,7 @@ Nizhal AI uses Electron's multi-process architecture:
 - **crypto (Node.js)**: License encryption
 
 ### Utilities
-- **electron-store 10.x**: Persistent data storage
+- **tauri-plugin-store**: Persistent data storage
 - **uuid 11.x**: Unique identifier generation
 - **dotenv 17.x**: Environment variables
 - **html-to-image 1.11**: Screenshot capture
@@ -154,7 +154,7 @@ Nizhal AI uses Electron's multi-process architecture:
 
 ```
 nizhal-ai/
-├── main.js                          # Electron main process entry
+├── src-tauri/src/main.rs            # Tauri main process entry
 ├── preload.js                       # Secure IPC bridge
 ├── package.json                     # Dependencies & scripts
 ├── vite.config.js                   # Build configuration
@@ -168,7 +168,7 @@ nizhal-ai/
 │   │   ├── AppStateService.js       # Centralized state sync
 │   │   └── NizhalAI.js              # Main AI orchestrator
 │   │
-│   ├── electron/                    # Electron-specific code
+│   ├── tauri/                       # Tauri-specific code
 │   │   ├── MultiWindowManager.js    # Dual-window management
 │   │   ├── bridge.js                # System control bridge
 │   │   └── windowDetection.js       # Active window tracking
@@ -226,7 +226,7 @@ nizhal-ai/
 │   └── entitlements.mac.plist
 │
 ├── dist/                            # Vite build output
-├── dist-electron/                   # Electron build output
+├── src-tauri/target/release/        # Tauri build output
 │
 └── docs/                            # Documentation
     ├── PRD.md
@@ -680,24 +680,24 @@ LICENSE_ENCRYPTION_KEY=random-32-char-string
 #### Windows
 ```bash
 npm run build:win  # Creates NSIS installer + portable
-# Output: dist-electron/Nizhal-AI-Setup-1.0.0.exe
+# Output: src-tauri/target/release/Nizhal AI Setup 1.0.0.exe
 ```
 
 #### macOS
 ```bash
 npm run build:mac  # Creates DMG + ZIP
-# Output: dist-electron/Nizhal-AI-1.0.0-Mac.dmg
+# Output: src-tauri/target/release/Nizhal AI 1.0.0.dmg
 ```
 
 #### Linux
 ```bash
 npm run build:linux  # Creates AppImage, deb, rpm
-# Output: dist-electron/Nizhal-AI-1.0.0-Linux.AppImage
+# Output: src-tauri/target/release/Nizhal AI 1.0.0.AppImage
 ```
 
 ---
 
-### Electron Builder Configuration
+### Tauri Builder Configuration
 
 Key settings in `package.json`:
 
@@ -706,11 +706,11 @@ Key settings in `package.json`:
   "build": {
     "appId": "com.nizhal.ai",
     "productName": "Nizhal AI",
-    "directories": { "output": "dist-electron" },
+    "directories": { "output": "src-tauri/target" },
     "files": [
       "main.js",
       "preload.js",
-      "src/electron/**/*",
+      "src-tauri/**/*",
       "src/core/**/*",
       "src/services/**/*",
       "dist/**/*"
@@ -807,12 +807,12 @@ const cache = new WeakMap();
 
 ## 🔒 Security
 
-### Electron Security Best Practices
+### Tauri Security Best Practices
 
 #### 1. Context Isolation
 ```javascript
 // preload.js
-const { contextBridge, ipcRenderer } = require('electron');
+const { invoke } = require('@tauri-apps/api/core');
 
 contextBridge.exposeInMainWorld('api', {
   // Safe, validated API
@@ -994,7 +994,7 @@ if (isDev || DEBUG) {
 
 ### Planned Metrics
 
-- **Crash Reports**: Electron's crashReporter
+- **Crash Reports**: Tauri crash reporter (e.g., Sentry)
 - **Performance Tracking**: Custom event logging
 - **Usage Analytics**: Opt-in only, privacy-respecting
 
@@ -1022,12 +1022,12 @@ async function trackEvent(category, action, label) {
 - **Tailwind CSS IntelliSense**: Styling autocomplete
 - **Error Lens**: Inline error display
 
-### Debugging Electron
+### Debugging Tauri
 
 **Main Process**:
 ```bash
 # Launch with Node debugger
-node --inspect=5858 node_modules/electron/cli.js .
+npm run tauri:dev
 ```
 
 **Renderer Process**:
@@ -1037,7 +1037,7 @@ node --inspect=5858 node_modules/electron/cli.js .
 
 ## 📚 Additional Resources
 
-- [Electron Documentation](https://www.electronjs.org/docs)
+- [Tauri Documentation](https://tauri.app/docs)
 - [Three.js Documentation](https://threejs.org/docs/)
 - [VRM Specification](https://vrm-consortium.org/)
 - [Ollama Documentation](https://ollama.com/docs)

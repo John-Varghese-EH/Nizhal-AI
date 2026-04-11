@@ -64,13 +64,13 @@ export class MusicDanceService {
     }
 
     /**
-     * Start analyzing system audio (if available via electron)
+     * Start analyzing system audio (if available via Tauri)
      */
     async startSystemAudioListening() {
         if (!await this.initialize()) return false;
 
         try {
-            // Try to get system audio via Electron desktopCapturer
+            // Try to get system audio via screen capture API
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     mandatory: {

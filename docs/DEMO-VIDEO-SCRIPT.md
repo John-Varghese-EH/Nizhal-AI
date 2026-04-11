@@ -9,7 +9,7 @@
 **Visual**:
 - Black screen
 - Terminal command appears: `npm run dev`
-- Electron window spawns
+- App window spawns
 - Transparent VRM character fades in on desktop
 - Character does subtle idle breathing animation
 
@@ -173,7 +173,7 @@ Network Utils (Ethical Use Only):
     - Coqui TTS (Free Voice)
     - Web Speech API
     - ADB Tools
-    - Electron + React
+    - Tauri + React
 - All logos fade, leaving only Nizhal AI logo
 
 **Voiceover**:

@@ -1,4 +1,4 @@
-// Browser-compatible store (replaces electron-store)
+// Browser-compatible persistent store
 class LocalStore {
     constructor({ name }) {
         this.prefix = name;

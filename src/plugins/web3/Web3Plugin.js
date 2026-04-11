@@ -29,7 +29,7 @@ export const Web3Plugin = {
             // Assume the user wants us to read clipboard if text is short command
             try {
                 // Clipboard read usually requires renderer context, 
-                // in main process we might need electron's clipboard.
+                // in main process we might need native clipboard.
                 // For now, prompt user to paste code
                 if (!text.includes("contract")) {
                     return "Please paste the contract code you want me to audit. 📋";

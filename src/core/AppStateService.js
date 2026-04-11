@@ -2,13 +2,13 @@
  * AppStateService - Centralized state management for Nizhal AI
  * 
  * Provides a unified state system with:
- * - electron-store persistence
+ * - Tauri store persistence
  * - IPC-based synchronization across all windows
  * - Hot-reload capability via observers
  * - Type-safe state access
  */
 
-// Browser-compatible store (replaces electron-store)
+// Browser-compatible persistent store
 class LocalStore {
     constructor({ name }) { this.prefix = name; }
     has(key) { return localStorage.getItem(`${this.prefix}:${key}`) !== null; }
@@ -99,14 +99,14 @@ class AppStateService {
 
     /**
      * Initialize the service (call from main process)
-     * @param {Electron.IpcMain} ipcMain - Electron IPC main module
+     * @param {Object} ipcMain - Tauri API module equivalent
      */
     initialize(ipcMain) {
         if (this.initialized) return;
 
         this.ipcMain = ipcMain;
 
-        // Initialize electron-store with schema validation
+        // Initialize store with schema validation
         this.store = new LocalStore({
             name: 'nizhal-state',
             defaults: defaultState,
