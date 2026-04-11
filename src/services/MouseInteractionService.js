@@ -146,8 +146,8 @@ export class MouseInteractionService {
         // Convert normalized position to world space
         // Cursor position maps to a point in front of the avatar
         this.lookAtTarget.set(
-            this.normalizedPosition.x * 2, // Horizontal range
-            1.5 + this.normalizedPosition.y * 0.5, // Vertical range centered on head
+            Math.max(-2.5, Math.min(2.5, this.normalizedPosition.x * 2)), 
+            Math.max(0.7, Math.min(2.5, 1.5 + this.normalizedPosition.y * 0.5)), 
             2 // Fixed depth in front of avatar
         );
 

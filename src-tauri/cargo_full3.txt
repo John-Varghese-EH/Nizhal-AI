@@ -1,0 +1,8 @@
+﻿cargo :     Checking nizhal-ai v1.0.0 (D:\Users\john3\Documents\GitHub\Nizhal-AI\src-tauri)
+At line:1 char:1
++ cargo check 2>&1 | Out-File -FilePath cargo_full3.txt -Encoding utf8; ...
++ ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Checking ni...l-AI\src-tauri):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.09s

@@ -17,6 +17,7 @@ const CameraFeed = ({
     onFrame,
     privacyMode = false,
     showControls = true,
+    showSwitchControl = false,
     enableObjectDetection = false,
     className = ''
 }) => {
@@ -333,7 +334,7 @@ const CameraFeed = ({
             )}
 
             {/* Camera switch button */}
-            {enabled && isActive && cameras.length > 1 && showControls && (
+            {enabled && isActive && cameras.length > 1 && (showControls || showSwitchControl) && (
                 <motion.button
                     whileTap={{ scale: 0.9 }}
                     onClick={switchCamera}

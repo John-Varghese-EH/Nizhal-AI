@@ -90,23 +90,23 @@ class WindowSittingService {
         if (windows && Array.isArray(windows)) {
             for (const win of windows) {
                 // Skip if window is too small
-                if (win.Width < this.minWidthToSit) continue;
+                if (win.width < this.minWidthToSit) continue;
 
                 // Check if character is horizontally within window bounds
-                const winLeft = win.X;
-                const winRight = win.X + win.Width;
+                const winLeft = win.x;
+                const winRight = win.x + win.width;
 
                 if (charCenter >= winLeft && charCenter <= winRight) {
                     // Check vertical distance (window top vs character bottom)
                     // We want windows strictly BELOW the character
-                    if (win.Y >= charBottom - 20) { // Allow slight overlap
-                        const dist = win.Y - charBottom;
+                    if (win.y >= charBottom - 20) { // Allow slight overlap
+                        const dist = win.y - charBottom;
                         if (dist >= -20 && dist < this.sitDistanceThreshold && dist < minDistance) {
                             minDistance = dist;
                             nearestSupport = {
                                 type: 'window',
                                 rect: win,
-                                y: win.Y
+                                y: win.y
                             };
                         }
                     }

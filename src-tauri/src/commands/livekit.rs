@@ -29,7 +29,7 @@ fn is_livekit_configured() -> bool {
 #[tauri::command]
 pub async fn livekit_connect(
     _app: tauri::AppHandle,
-    user_name: Option<String>,
+    _user_name: Option<String>,
     room_name: Option<String>,
 ) -> Result<LiveKitConnectionResult, String> {
     if !is_livekit_configured() {
@@ -79,7 +79,7 @@ pub async fn livekit_get_status() -> Result<LiveKitStatus, String> {
 pub async fn livekit_start_agent(
     app: tauri::AppHandle,
     personality: Option<String>,
-    room_name: Option<String>,
+    _room_name: Option<String>,
 ) -> Result<serde_json::Value, String> {
     if !is_livekit_configured() {
         return Ok(serde_json::json!({"success": false, "error": "LiveKit not configured"}));

@@ -83,7 +83,7 @@ export class VRMAAnimationService {
         this.lookAtProxy = null;
 
         // Blending - longer duration for smoother transitions
-        this.blendDuration = 0.5; // seconds (increased from 0.3 for smoother transitions)
+        this.blendDuration = 0.6; // seconds (smooth crossfade)
         this.clock = new THREE.Clock();
 
         // Loader dependencies (lazy loaded)
@@ -287,13 +287,16 @@ export class VRMAAnimationService {
                 `${bone.name}.quaternion`,
                 origTrack.times,
                 // Handle VRM 0.x vs 1.0 coordinate system differences
-                origTrack.values.map((v, i) => (metaVersion === '0' && i % 2 === 0 ? -v : v))
+                origTrack.values.map((v, i) => ((metaVersion === '0' || metaVersion === '0.0') && i % 2 === 0 ? -v : v))
             );
             rotation.set(name, track);
         }
 
-        // Translation tracks (only for hips)
+        // Translation tracks (CRITICAL FIX: ONLY allow the hips to have translation tracks)
+        // Highly stylized VRMs will contort (e.g. legs go over head) if we allow legs/spine to translate
         for (const [name, origTrack] of vrmAnimation.humanoidTracks.translation.entries()) {
+            if (name !== 'hips') continue; // Enforce VRM standard - ignore all other translation tracks
+
             const bone = humanoid.getNormalizedBoneNode(name);
             if (!bone) continue;
 
@@ -303,7 +306,7 @@ export class VRMAAnimationService {
             const scale = humanoidY / animationY;
 
             const track = origTrack.clone();
-            track.values = track.values.map((v, i) => (metaVersion === '0' && i % 3 !== 1 ? -v : v) * scale);
+            track.values = track.values.map((v, i) => ((metaVersion === '0' || metaVersion === '0.0') && i % 3 !== 1 ? -v : v) * scale);
             track.name = `${bone.name}.position`;
             translation.set(name, track);
         }
@@ -372,6 +375,17 @@ export class VRMAAnimationService {
         newAction.setEffectiveTimeScale(timeScale);
         newAction.setEffectiveWeight(1); // Default to 1, crossFade will adjust if needed
         newAction.setLoop(loop, Infinity);
+        newAction.clampWhenFinished = true; // CRITICAL: Prevents snapping to T-Pose when animation ends
+
+        // CRITICAL FIX FOR LEG-TO-HEAD CONTORTIONS:
+        // Automatically stop any non-current background actions to prevent weight accumulation
+        for (const [animName, animData] of this.animations.entries()) {
+            if (animName !== name && animName !== this.currentAnimation) {
+                if (animData.action && animData.action.isRunning()) {
+                    animData.action.stop(); 
+                }
+            }
+        }
 
         // Handle Cross-fading
         if (this.currentAnimation && this.currentAnimation !== name) {
@@ -381,11 +395,20 @@ export class VRMAAnimationService {
             if (currentAction && currentAction.isRunning()) {
                 // Reset new action to start
                 newAction.reset();
+                // Ensure target has full weight goal for crossfade interpolation
+                newAction.setEffectiveWeight(1.0);
+                newAction.setEffectiveTimeScale(1.0);
                 newAction.play();
 
-                // Crossfade: transitions weights from current -> new
-                // This ensures total weight stays around 1.0, preventing T-pose dips
-                currentAction.crossFadeTo(newAction, fadeIn, true);
+                // Crossfade: transitions weights from current -> new seamlessly
+                // Check if current action has any weight to fade from
+                const currentWeight = currentAction.getEffectiveWeight();
+                if (currentWeight > 0.01) {
+                    currentAction.crossFadeTo(newAction, fadeIn, true);
+                } else {
+                    currentAction.stop();
+                    newAction.fadeIn(fadeIn);
+                }
             } else {
                 // Old action not running, just fade in new one from 0
                 newAction.reset();
@@ -415,8 +438,16 @@ export class VRMAAnimationService {
             if (animation?.action) {
                 animation.action.fadeOut(fadeOut);
             }
-            this.currentAnimation = null;
         }
+        
+        // Also cleanup fallback rest pose
+        for (const animData of this.animations.values()) {
+            if (animData.action && animData.action.isRunning()) {
+                animData.action.fadeOut(fadeOut);
+            }
+        }
+        
+        this.currentAnimation = null;
         this.state = AnimationState.IDLE;
     }
 
@@ -453,6 +484,8 @@ export class VRMAAnimationService {
     update(delta) {
         if (this.mixer) {
             this.mixer.update(delta);
+            // Enforce upright orientation after animation update
+            this._clampModelOrientation();
         }
 
         // Animation watchdog - prevent T-pose by ensuring animation is always playing
@@ -493,21 +526,24 @@ export class VRMAAnimationService {
     }
 
     /**
-     * Play a random animation from the library
+     * Play a random animation from SAFE categories only (idle + pose)
+     * Never picks sit, spin, dance, or special to prevent horizontal/spinning bugs
      */
     async _playRandomAnimation() {
-        const allAnims = this.library.getAllAnimationNames();
-        if (allAnims.length === 0) {
-            throw new Error('No animations available');
+        // Only pick from safe upright categories
+        const safeCategories = ['idle', 'pose'];
+        const safeAnims = [];
+        for (const cat of safeCategories) {
+            const categoryAnims = this.library.getCategory(cat);
+            safeAnims.push(...categoryAnims);
         }
 
-        // Pick a random animation
-        const randomName = allAnims[Math.floor(Math.random() * allAnims.length)];
-        const animConfig = this.library.getAnimation(randomName);
-
-        if (!animConfig) {
-            throw new Error(`Animation ${randomName} not found`);
+        if (safeAnims.length === 0) {
+            throw new Error('No safe animations available');
         }
+
+        // Pick a random safe animation
+        const animConfig = safeAnims[Math.floor(Math.random() * safeAnims.length)];
 
         // Load if needed
         if (!this.hasAnimation(animConfig.name)) {
@@ -520,6 +556,38 @@ export class VRMAAnimationService {
             loop: animConfig.loop ? THREE.LoopRepeat : THREE.LoopOnce,
             fadeIn: this.blendDuration
         });
+    }
+
+    /**
+     * Clamp the root bone (hips) orientation to prevent the model from going horizontal.
+     * This is a safety net — even if an animation tries to tilt the model sideways,
+     * we enforce upright posture (unless explicitly in a sitting state).
+     */
+    _clampModelOrientation() {
+        if (!this.vrm?.humanoid) return;
+
+        // Don't clamp during sitting — sit animation legitimately rotates hips
+        if (this.currentState === 'sitting' || this.currentState === 'sleeping') return;
+
+        try {
+            const hipsBone = this.vrm.humanoid.getNormalizedBoneNode('hips');
+            if (!hipsBone) return;
+
+            // Max tilt: ±30 degrees (0.52 rad) for X (forward/back lean) and Z (side lean)
+            const MAX_TILT = 0.52;
+
+            // Clamp X rotation (pitch — forward/backward tilt)
+            if (Math.abs(hipsBone.rotation.x) > MAX_TILT) {
+                hipsBone.rotation.x = Math.sign(hipsBone.rotation.x) * MAX_TILT;
+            }
+
+            // Clamp Z rotation (roll — side tilt, main cause of horizontal bug)
+            if (Math.abs(hipsBone.rotation.z) > MAX_TILT) {
+                hipsBone.rotation.z = Math.sign(hipsBone.rotation.z) * MAX_TILT;
+            }
+        } catch (e) {
+            // Silently ignore — some models might not have standard hips bone
+        }
     }
 
     /**

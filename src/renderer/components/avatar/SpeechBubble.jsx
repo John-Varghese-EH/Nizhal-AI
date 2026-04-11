@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const SpeechBubble = ({ message, isVisible, onClose, duration = 5000, variant = 'default' }) => {
+const SpeechBubble = ({ message, isVisible, onClose, duration = 5000, variant = 'default', position = { x: 0, y: 0 }, avatarScale = 1.0, windowSize = { width: typeof window !== 'undefined' ? window.innerWidth : 1920, height: typeof window !== 'undefined' ? window.innerHeight : 1080 } }) => {
     const [displayedText, setDisplayedText] = useState('');
     const [isTyping, setIsTyping] = useState(false);
 
@@ -53,15 +53,33 @@ const SpeechBubble = ({ message, isVisible, onClose, duration = 5000, variant = 
     const bubbleStyle = variants[variant] || variants.default;
     const glowStyle = glowColors[variant] || glowColors.default;
 
+    // Determine bubble placement relative to the character
+    // If character is on the right half of the screen, show bubble on their left. Otherwise, show on right.
+    const isCharacterOnRight = position.x > 0; 
+    
+    // Y-position tweaks: Move it UP to be near the face, not the feet. 
+    // Character Y is relative to center. Face is roughly 200-300px above the character center point, scaled by avatarSize.
+    const bubbleY = position.y - (250 * avatarScale); 
+    
+    // X-position tweaks: Offset to the side of the character.
+    const bubbleX = position.x + ((isCharacterOnRight ? -220 : 220) * avatarScale);
+
     return (
         <AnimatePresence>
             {isVisible && message && (
                 <motion.div
-                    initial={{ opacity: 0, scale: 0.8, y: 20 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.8, y: -10, transition: { duration: 0.2 } }}
+                    initial={{ opacity: 0, scale: 0.8 * avatarScale, x: isCharacterOnRight ? 20 : -20 }}
+                    animate={{ opacity: 1, scale: 1 * avatarScale, x: 0 }}
+                    exit={{ opacity: 0, scale: 0.8 * avatarScale, x: isCharacterOnRight ? 10 : -10, transition: { duration: 0.2 } }}
                     transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-                    className="absolute bottom-[55%] left-1/2 transform -translate-x-1/2 max-w-[90%] z-50 pointer-events-none"
+                    className="absolute z-50 pointer-events-none"
+                    style={{
+                        // 50% translates it to center of screen first, then we apply the exact pixel overrides
+                        top: `calc(50% + ${bubbleY}px)`,
+                        left: `calc(50% + ${bubbleX}px)`,
+                        transform: 'translate(-50%, -50%)',
+                        maxWidth: '300px'
+                    }}
                 >
                     <div className={`${bubbleStyle} ${glowStyle} backdrop-blur-xl px-5 py-3 rounded-xl border text-sm font-medium text-center relative`}>
                         {/* Futuristic corner accents */}
@@ -86,8 +104,10 @@ const SpeechBubble = ({ message, isVisible, onClose, duration = 5000, variant = 
                             />
                         )}
 
-                        {/* Bubble tail - futuristic triangle */}
-                        <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[8px] border-r-[8px] border-t-[10px] border-l-transparent border-r-transparent border-t-slate-800/90" />
+                        {/* Bubble tail - dynamic positioning */}
+                        <div 
+                            className={`absolute top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-[8px] border-b-[8px] border-t-transparent border-b-transparent ${isCharacterOnRight ? 'right-[-10px] border-l-[10px] border-l-slate-800/90' : 'left-[-10px] border-r-[10px] border-r-slate-800/90'}`} 
+                        />
                     </div>
                 </motion.div>
             )}

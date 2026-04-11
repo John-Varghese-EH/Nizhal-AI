@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import * as THREE from 'three';
 
 // Extend THREE objects for R3F (required in v8+)
-extend(THREE);
+
 
 /**
  * 3D Model Component - Loads and renders a GLTF/GLB model
@@ -26,8 +26,13 @@ const Model = ({
 
     // Animation mapping based on state
     useEffect(() => {
-        // Stop all current animations
-        Object.values(actions).forEach(action => action?.fadeOut(0.3));
+        // Stop all current animations forcefully and reset weights
+        Object.values(actions).forEach(action => {
+            if (action) {
+                action.stop();
+                action.setEffectiveWeight(0);
+            }
+        });
 
         // Map states to animation names (common naming conventions)
         const animationMap = {
@@ -45,14 +50,21 @@ const Model = ({
         for (const animName of targetAnimations) {
             const action = actions[animName];
             if (action) {
-                action.reset().fadeIn(0.3).play();
+                action.reset();
+                action.setEffectiveWeight(1);
+                action.fadeIn(0.3).play();
                 break;
             }
         }
 
         // Fallback to first available animation
         if (names.length > 0 && !targetAnimations.some(n => actions[n])) {
-            actions[names[0]]?.reset().fadeIn(0.3).play();
+            const fbAction = actions[names[0]];
+            if (fbAction) {
+                fbAction.reset();
+                fbAction.setEffectiveWeight(1);
+                fbAction.fadeIn(0.3).play();
+            }
         }
     }, [state, actions, names]);
 

@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import * as THREE from 'three';
 
 // Extend THREE objects for R3F (required in v8+)
-extend(THREE);
+
 
 const HUDRing = ({ radius, thickness, color, rotationSpeed, segments = 64, dashArray = null }) => {
     const ringRef = useRef();

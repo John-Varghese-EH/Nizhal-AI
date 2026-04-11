@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Mutex;
 use tauri::Emitter;
-use tauri::Manager;
 use tauri_plugin_store::StoreExt;
 
 /// Chat message structure
@@ -663,7 +661,7 @@ pub async fn get_providers(app: tauri::AppHandle) -> Result<Vec<ProviderConfig>,
 
     Ok(providers
         .into_iter()
-        .map(|(id, name, default_model)| ProviderConfig {
+        .map(|(id, name, _default_model)| ProviderConfig {
             id: id.to_string(),
             name: name.to_string(),
             model: get_default_model(id),
@@ -702,7 +700,7 @@ pub async fn get_provider_status(app: tauri::AppHandle) -> Result<ProviderStatus
 }
 
 #[tauri::command]
-pub async fn get_models(app: tauri::AppHandle) -> Result<HashMap<String, Vec<String>>, String> {
+pub async fn get_models(_app: tauri::AppHandle) -> Result<HashMap<String, Vec<String>>, String> {
     let mut models = HashMap::new();
     models.insert(
         "gemini".into(),

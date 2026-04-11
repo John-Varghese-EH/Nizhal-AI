@@ -218,6 +218,7 @@ const App = () => {
                                         activeSkin={activePersona?.skin}
                                         personalityState={personalityState}
                                         isActive={true}
+                                        showVideoAvatar={isCompact} // Prevent showing two characters on Desktop
                                     />
                                 </Suspense>
                             </div>

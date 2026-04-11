@@ -49,6 +49,7 @@ function createMockAPI() {
             getState: async () => ({ isMaximized: false, isVisible: true }),
             showChat: async () => {},
             hideChat: async () => {},
+            startDragging: async () => {},
         },
         persona: {
             getActive: async () => ({ id: 'gf', name: 'Girlfriend', display_name: 'Girlfriend Mode', displayName: 'Your AI Companion' }),

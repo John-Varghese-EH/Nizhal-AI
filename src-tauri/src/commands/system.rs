@@ -117,6 +117,12 @@ pub async fn open_external_url(url: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("Failed to open URL: {}", e))?;
     }
+    // On Android/iOS, URL opening is handled by tauri-plugin-opener on the frontend
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = url;
+        // No-op: use tauri-plugin-opener from frontend instead
+    }
     Ok(())
 }
 

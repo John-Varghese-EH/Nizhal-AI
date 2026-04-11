@@ -2,6 +2,7 @@ import React, { Component } from 'react';
 import ReactDOM from 'react-dom/client';
 import '../browserShim'; // Initialize Tauri/browser API bridge for character window
 import CharacterApp from './CharacterApp';
+import { ToastProvider } from '../contexts/ToastContext';
 import '../styles/globals.css';
 
 class ErrorBoundary extends Component {
@@ -31,7 +32,9 @@ class ErrorBoundary extends Component {
 ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>
         <ErrorBoundary>
-            <CharacterApp />
+            <ToastProvider>
+                <CharacterApp />
+            </ToastProvider>
         </ErrorBoundary>
     </React.StrictMode>
 );

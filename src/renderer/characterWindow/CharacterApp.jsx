@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense, lazy } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Canvas, extend } from '@react-three/fiber';
-import * as THREE from 'three';
 import { MusicDanceService } from '../../services/MusicDanceService';
 import { ExpressionController } from '../../services/ExpressionController';
 import { getAvatarStateController, AvatarState } from '../../services/AvatarStateController';
@@ -10,25 +8,36 @@ import { companionPersonality } from '../../services/CompanionPersonality';
 import { cuteErrorHandler } from '../../services/CuteErrorHandler';
 import { surpriseService } from '../../services/SurpriseService';
 import CharacterCustomizer from '../components/CharacterCustomizer';
-import JarvisHologram from '../components/avatar/JarvisHologram';
 import SpeechBubble from '../components/avatar/SpeechBubble';
 import QuickMenu from '../components/QuickMenu';
-import ParticleEffects from '../components/ParticleEffects';
 import ShareCard from '../components/ShareCard';
 import SettingsView from '../components/SettingsView';
 import TicTacToe from '../components/TicTacToe';
+import MobileAvatar2D from '../components/avatar/MobileAvatar2D';
+import { Platform } from '../../services/PlatformBridge';
 
 import { useTheme } from '../hooks/useTheme';
 import { useFileDrop, getFileDescription } from '../hooks/useFileDrop';
 import '../styles/glass.css';
 
-// Extend THREE objects for R3F (required in v8+)
-extend(THREE);
+// Conditionally import Three.js stack — only loaded on HIGH/MEDIUM tier devices
+// This saves ~800KB+ of JS on low-end mobile devices
+let Canvas, extend, THREE;
+try {
+    const fiber = await import('@react-three/fiber');
+    Canvas = fiber.Canvas;
+    extend = fiber.extend;
+    THREE = await import('three');
+} catch (e) {
+    console.warn('[CharacterApp] Three.js not available, using 2D fallback');
+}
 
-// Import VRM model component (without Canvas wrapper) for use inside existing Canvas
+// Lazy-load heavy 3D components only when needed
 const OptimizedVRMModel = lazy(() =>
     import('../components/avatar/OptimizedVRMAvatar').then(module => ({ default: module.OptimizedVRMModel }))
 );
+const JarvisHologram = lazy(() => import('../components/avatar/JarvisHologram'));
+const ParticleEffects = lazy(() => import('../components/ParticleEffects'));
 
 // Available characters - includes both VRM models and special avatars
 const AVAILABLE_CHARACTERS = [
@@ -53,6 +62,21 @@ const AVAILABLE_CHARACTERS = [
  * CharacterApp - Optimized standalone character window
  */
 const CharacterApp = () => {
+    // Device capability tier: 'high', 'medium', 'low'
+    const [deviceTier, setDeviceTier] = useState('medium');
+    const [platformReady, setPlatformReady] = useState(false);
+    const isMobile = Platform.isMobile();
+    const shouldUse3D = Canvas && (deviceTier === 'high' || deviceTier === 'medium');
+
+    // Initialize platform detection on mount
+    useEffect(() => {
+        Platform.init().then(() => {
+            setDeviceTier(Platform.getDeviceTier());
+            setPlatformReady(true);
+            console.log(`[CharacterApp] Device tier: ${Platform.getDeviceTier()}, Mobile: ${Platform.isMobile()}, 3D: ${Platform.shouldUse3D()}`);
+        });
+    }, []);
+
     // Unified settings state
     const [userProfile, setUserProfile] = useState({
         name: '',
@@ -104,20 +128,31 @@ const CharacterApp = () => {
     const [customizerOpen, setCustomizerOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [shareOpen, setShareOpen] = useState(false);
-    const [needsOnboarding, setNeedsOnboarding] = useState(false); // Default true if no profile found
+    const [needsOnboarding, setNeedsOnboarding] = useState(false);
     const [isDancing, setIsDancing] = useState(false);
     const [danceIntensity, setDanceIntensity] = useState(0);
     const [vrmLoaded, setVrmLoaded] = useState(false);
-    const [isClickThrough, setIsClickThrough] = useState(true); // Click-through by default
+    const [isClickThrough, setIsClickThrough] = useState(true);
     const [isAltPressed, setIsAltPressed] = useState(false);
-    const [windowSize, setWindowSize] = useState({ width: 0, height: 0 }); // Start with 0 to detect when ready
+    const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
     const [windowReady, setWindowReady] = useState(false);
     const [isGameActive, setIsGameActive] = useState(false);
     const [isScreensaver, setIsScreensaver] = useState(false);
     const [bootComplete, setBootComplete] = useState(false);
+    // In-canvas character position (pixels offset from center)
+    const [characterPosition, setCharacterPosition] = useState({ x: 0, y: 0 });
+    const [localScaleOffset, setLocalScaleOffset] = useState(1.0);
+    const tiltOptions = [
+        { y: 0.5, z: 3.5, fov: 35 },     // Straight on (default)
+        { y: 1.5, z: 3.0, fov: 40 },     // Tilted down slightly (standing over)
+        { y: 2.5, z: 2.5, fov: 45 },     // Tilted down more
+        { y: -0.2, z: 3.5, fov: 35 }     // Tilted up (looking from below)
+    ];
+    const [localTiltIdx, setLocalTiltIdx] = useState(0);
     const previousWindowSize = useRef(null);
 
-    const dragOffset = useRef({ x: 0, y: 0 });
+    const dragStartPos = useRef({ x: 0, y: 0 });
+    const dragStartCharPos = useRef({ x: 0, y: 0 });
     const danceServiceRef = useRef(null);
     const expressionRef = useRef(null);
     const particleRef = useRef(null);
@@ -681,49 +716,69 @@ const CharacterApp = () => {
         };
     }, [isScreensaver]);
 
-    // Drag handlers
+    // Drag handlers — moves the 3D model WITHIN the full-screen canvas
     const handleDragStart = useCallback((e) => {
         if (e.button !== 0) return;
         setIsDragging(true);
         expressionRef.current?.setDragging(true);
-        // Update animation state to dragging
         getAvatarStateController().setState(AvatarState.DRAGGING);
-        dragOffset.current = { x: e.clientX, y: e.clientY };
-    }, []);
+        // Record starting mouse position and current character position
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        dragStartPos.current = { x: clientX, y: clientY };
+        dragStartCharPos.current = { ...characterPosition };
+    }, [characterPosition]);
 
     const handleDrag = useCallback((e) => {
         if (!isDragging) return;
-        const deltaX = e.clientX - dragOffset.current.x;
-        const deltaY = e.clientY - dragOffset.current.y;
-        window.nizhal?.invoke?.('window:moveCharacter', deltaX, deltaY);
-        dragOffset.current = { x: e.clientX, y: e.clientY };
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const deltaX = clientX - dragStartPos.current.x;
+        const deltaY = clientY - dragStartPos.current.y;
+        setCharacterPosition({
+            x: dragStartCharPos.current.x + deltaX,
+            y: dragStartCharPos.current.y + deltaY
+        });
     }, [isDragging]);
 
-    const handleDragEnd = useCallback(async () => {
+    const handleDragEnd = useCallback(() => {
+        if (!isDragging) return;
         setIsDragging(false);
         expressionRef.current?.setDragging(false);
 
         // Check if character is near taskbar (bottom of screen)
-        try {
-            const position = await window.nizhal?.invoke?.('window:getCharacterPosition');
-            if (position) {
-                const screenHeight = window.screen.height;
-                const taskbarThreshold = 100; // pixels from bottom to trigger sitting
+        const screenHeight = windowSize.height || window.innerHeight;
+        const taskbarThreshold = 100; // pixels from bottom
+        // characterPosition.y is offset from center; positive = downward
+        const feetY = (screenHeight / 2) + characterPosition.y;
 
-                // If character is near bottom of screen, trigger sitting on taskbar
-                if (position.y + position.height > screenHeight - taskbarThreshold) {
-                    console.log('[CharacterApp] Near taskbar - entering sitting pose');
-                    getAvatarStateController().setState(AvatarState.SITTING_TASKBAR);
-                    return;
-                }
-            }
-        } catch (e) {
-            // Position check failed, just go to idle
+        if (feetY > screenHeight - taskbarThreshold) {
+            console.log('[CharacterApp] Near taskbar — entering sitting pose');
+            // Snap to exact taskbar edge
+            setCharacterPosition(prev => ({
+                ...prev,
+                y: (screenHeight / 2) - taskbarThreshold + 30
+            }));
+            getAvatarStateController().setState(AvatarState.SITTING_TASKBAR);
+            return;
         }
 
-        // Return to idle animation state
+        // Return to idle
         getAvatarStateController().setState(AvatarState.IDLE);
-    }, []);
+    }, [isDragging, characterPosition, windowSize]);
+
+    // Wheel resize handler
+    const handleWheel = useCallback((e) => {
+        if (!isAltPressed) return;
+        // Provide consistent scaling regardless of mouse wheel tick size
+        const direction = Math.sign(e.deltaY);
+        setLocalScaleOffset(prev => {
+            // Zoom out if scrolling down (direction > 0), zoom in if scrolling up
+            const step = 0.15; 
+            const newScale = prev - (direction * step);
+            return Math.max(0.1, Math.min(3.5, newScale));
+        });
+    }, [isAltPressed]);
 
     // Toggle functions
     const toggleDance = useCallback(async () => {
@@ -820,23 +875,40 @@ const CharacterApp = () => {
         console.log('[CharacterApp] Profile updated:', newProfile);
     }, []);
 
+    // Dynamic zoom based on Idle/Active state (IDLE = 1.0x, ACTIVE = 0.85x)
+    const [dynamicIdleScale, setDynamicIdleScale] = useState(1.0);
+    
+    useEffect(() => {
+        // If the avatar is not thinking, speaking, or listening, they are IDLE
+        const isIdle = !avatarState.isSpeaking && !avatarState.isThinking && !avatarState.isListening;
+        
+        // Target scale based on idle state
+        setDynamicIdleScale(isIdle ? 1.0 : 0.85);
+    }, [avatarState]);
+
     // NOTE: All character animations now come from VRMA files in /public/assets/animations
     // CSS-based dance/float animations have been removed to use only VRMA bone animations
 
     // Prevent rendering until window size is detected to avoid "small top-left" glitch
     if (!windowReady) return null;
 
-    // Adjust character position slightly when game is active
-    // If game active, maybe push character up a bit?
+    const currentTilt = tiltOptions[localTiltIdx];
+
     const activeVrmConfig = isGameActive ? {
         ...vrmConfig,
         position: [vrmConfig.position[0], vrmConfig.position[1] - 0.5, vrmConfig.position[2] - 1], // Push back and down
-        scale: vrmConfig.scale * 0.8
-    } : vrmConfig;
+        scale: vrmConfig.scale * 0.8 * (uiSettings.characterScale ?? settings.scale ?? 1.0) * localScaleOffset,
+        cameraPosition: [vrmConfig.cameraPosition[0], currentTilt.y, currentTilt.z]
+    } : {
+        ...vrmConfig,
+        scale: vrmConfig.scale * dynamicIdleScale * (uiSettings.characterScale ?? settings.scale ?? 1.0) * localScaleOffset,
+        cameraPosition: [vrmConfig.cameraPosition[0], currentTilt.y, currentTilt.z]
+    };
 
     return (
         <>
-            <ParticleEffects ref={particleRef} />
+            {/* Only load particle effects on capable devices */}
+            {shouldUse3D && <Suspense fallback={null}><ParticleEffects ref={particleRef} /></Suspense>}
 
             {/* File Drop Overlay */}
             {isFileDragging && (
@@ -854,7 +926,7 @@ const CharacterApp = () => {
 
             <div
                 className={`w-screen h-screen overflow-hidden select-none transition-opacity duration-300 ${isClickThrough && !isGameActive ? 'pointer-events-none' : 'pointer-events-auto'}`}
-                style={{ opacity: (vrmLoaded) ? (settings.opacity ?? 1) : 0 }}
+                style={{ opacity: (vrmLoaded) ? (uiSettings.transparency ?? settings.characterOpacity ?? settings.opacity ?? 0.95) : 0 }}
             >
                 <AnimatePresence>
                     {isGameActive && (
@@ -876,91 +948,185 @@ const CharacterApp = () => {
                     variant={speechVariant}
                     isVisible={isSpeechVisible}
                     onClose={() => setIsSpeechVisible(false)}
+                    position={characterPosition}
+                    windowSize={windowSize}
+                    avatarScale={localScaleOffset}
                 />
+
+                {/* Alt-Key Interactive UI Controls */}
+                <AnimatePresence>
+                    {isAltPressed && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 20 }}
+                            className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-50 flex items-center gap-4 p-3 rounded-2xl bg-slate-900/80 backdrop-blur-md border border-slate-700 pointer-events-auto"
+                        >
+                            <div className="flex flex-col items-center">
+                                <span className="text-xs text-slate-400 font-bold mb-1 uppercase tracking-wider">Scroll to Resize • Drag to Move</span>
+                                <div className="flex gap-2">
+                                    <button 
+                                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-medium transition-colors border border-slate-600 focus:outline-none"
+                                        onClick={(e) => { 
+                                            e.stopPropagation(); 
+                                            const scales = [0.8, 1.0, 1.25, 1.5, 2.0];
+                                            let nextScaleIdx = scales.findIndex(s => s > localScaleOffset);
+                                            if (nextScaleIdx === -1) nextScaleIdx = 0;
+                                            setLocalScaleOffset(scales[nextScaleIdx]);
+                                        }}
+                                        title={`Current Scale: ${localScaleOffset.toFixed(2)}x`}
+                                    >
+                                        Resize
+                                    </button>
+                                    <button 
+                                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-medium transition-colors border border-slate-600 focus:outline-none"
+                                        onClick={(e) => { 
+                                            e.stopPropagation(); 
+                                            setLocalTiltIdx((prev) => (prev + 1) % tiltOptions.length);
+                                        }}
+                                    >
+                                        Tilt Layout
+                                    </button>
+                                </div>
+                                <div className="flex gap-2 mt-2">
+                                    <button 
+                                        className="px-3 py-1.5 bg-pink-500/80 hover:bg-pink-500 text-white rounded-lg text-xs font-medium transition-colors border border-pink-400 focus:outline-none"
+                                        onClick={(e) => { e.stopPropagation(); expressionRef.current?.onEvent('happy'); }}
+                                    >👋 Wave</button>
+                                    <button 
+                                        className="px-3 py-1.5 bg-purple-500/80 hover:bg-purple-500 text-white rounded-lg text-xs font-medium transition-colors border border-purple-400 focus:outline-none"
+                                        onClick={(e) => { e.stopPropagation(); toggleDance(); }}
+                                    >🎵 Dance</button>
+                                    <button 
+                                        className="px-3 py-1.5 bg-blue-500/80 hover:bg-blue-500 text-white rounded-lg text-xs font-medium transition-colors border border-blue-400 focus:outline-none"
+                                        onClick={(e) => { e.stopPropagation(); getAvatarStateController().setState(AvatarState.SLEEPING); }}
+                                    >💤 Sleep</button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 <motion.div
                     className="relative interactive cursor-pointer w-full h-full flex items-center justify-center"
                     initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: settings.scale, opacity: 1 }}
+                    animate={{ scale: 1, opacity: 1 }}
                     transition={{ type: 'spring', damping: 15 }}
                     onClick={handleAvatarClick}
                     onContextMenu={handleContextMenu}
-                    onMouseDown={handleDragStart}
-                    onMouseMove={handleDrag}
-                    onMouseUp={handleDragEnd}
-                    onMouseLeave={handleDragEnd}
+                    onMouseDown={!isMobile ? handleDragStart : undefined}
+                    onMouseMove={!isMobile ? handleDrag : undefined}
+                    onMouseUp={!isMobile ? handleDragEnd : undefined}
+                    onMouseLeave={!isMobile ? handleDragEnd : undefined}
+                    onWheel={!isMobile ? handleWheel : undefined}
+                    onTouchStart={isMobile ? handleDragStart : undefined}
+                    onTouchMove={isMobile ? handleDrag : undefined}
+                    onTouchEnd={isMobile ? handleDragEnd : undefined}
                 >
-                    <Canvas
-                        shadows
-                        dpr={[1.5, 2]} // Higher pixel ratio for sharper rendering
-                        camera={{
-                            position: activeVrmConfig.cameraPosition,
-                            fov: 35, // Narrower FOV prevents edge distortion
-                            near: 0.1, // Prevent near clipping
-                            far: 100 // Prevent far clipping
-                        }}
-                        gl={{
-                            alpha: true,
-                            antialias: true,
-                            preserveDrawingBuffer: true,
-                            powerPreference: 'high-performance'
-                        }}
-                        className="block"
-                        style={{
-                            width: windowSize.width,
-                            height: windowSize.height,
-                            pointerEvents: 'none',
-                            position: 'absolute',
-                            top: 0,
-                            left: 0
-                        }}
-                    >
-                        {/* Enhanced lighting for better VRM visibility */}
-                        <ambientLight intensity={1.2} />
-                        <directionalLight position={[0, 5, 5]} intensity={1.5} />
-                        <pointLight position={[10, 10, 10]} intensity={1.5} />
-                        <pointLight position={[-10, 5, 5]} intensity={0.8} />
-
-                        {currentCharacter.type === 'hologram' ? (
-                            /* Jarvis Futuristic Hologram Sphere */
-                            <JarvisHologram
-                                state={avatarState.isSpeaking ? 'speaking' : avatarState.isThinking ? 'thinking' : avatarState.isListening ? 'listening' : 'idle'}
-                                mood="neutral"
-                                size="large"
+                    {/* === ADAPTIVE RENDERING === */}
+                    {/* LOW TIER / Mobile fallback: Lightweight 2D SVG avatar */}
+                    {!shouldUse3D && (
+                        <div className="flex items-center justify-center w-full h-full">
+                            <MobileAvatar2D
+                                characterId={settings.character}
+                                emotion={currentEmotion}
+                                isSpeaking={avatarState.isSpeaking}
+                                isThinking={avatarState.isThinking}
+                                isListening={avatarState.isListening}
+                                size={Math.min(windowSize.width, windowSize.height) * 0.6}
+                                onTap={handleAvatarClick}
+                                onLongPress={() => {
+                                    setContextMenuPos({ x: windowSize.width / 2, y: windowSize.height / 2 });
+                                    setContextMenuOpen(true);
+                                }}
                             />
-                        ) : (
-                            /* VRM 3D Character Model - dynamically scaled to window */
-                            <Suspense fallback={null}>
-                                {windowReady && (
-                                    <OptimizedVRMModel
-                                        key={currentCharacter.id}
-                                        url={currentCharacter.model}
-                                        scale={activeVrmConfig.scale}
-                                        position={activeVrmConfig.position}
-                                        isSpeaking={avatarState.isSpeaking}
-                                        expression={currentEmotion === 'thinking' ? 'thinking' : currentEmotion}
-                                        enableLookAt={settings.mouseTracking}
-                                        enableBlink={true}
-                                        onHoverIn={() => {
-                                            window.nizhal?.character?.setClickThrough?.(false);
-                                            setIsClickThrough(false);
-                                        }}
-                                        onHoverOut={() => {
-                                            window.nizhal?.character?.setClickThrough?.(true);
-                                            setIsClickThrough(true);
-                                        }}
-                                        onLoad={() => {
-                                            console.log('VRM loaded successfully:', currentCharacter.name);
-                                            setVrmLoaded(true);
-                                        }}
-                                        onError={(err) => {
-                                            console.error('VRM failed to load:', currentCharacter.model, err);
-                                        }}
+                        </div>
+                    )}
+
+                    {/* HIGH/MEDIUM TIER: Full 3D Canvas with VRM */}
+                    {shouldUse3D && Canvas && (
+                        <Canvas
+                            shadows={deviceTier === 'high'}
+                            dpr={deviceTier === 'high' ? [1.5, 2] : [1, 1.5]}
+                            camera={{
+                                position: activeVrmConfig.cameraPosition,
+                                fov: currentTilt.fov,
+                                near: 0.1,
+                                far: 100
+                            }}
+                            gl={{
+                                alpha: true,
+                                antialias: deviceTier === 'high',
+                                preserveDrawingBuffer: true,
+                                powerPreference: deviceTier === 'high' ? 'high-performance' : 'default'
+                            }}
+                            className="block"
+                            style={{
+                                width: windowSize.width,
+                                height: windowSize.height,
+                                pointerEvents: 'none',
+                                position: 'absolute',
+                                top: 0,
+                                left: 0
+                            }}
+                        >
+                            {/* Lighting adjusted per tier */}
+                            <ambientLight intensity={1.2} />
+                            <directionalLight position={[0, 5, 5]} intensity={1.5} />
+                            {deviceTier === 'high' && (
+                                <>
+                                    <pointLight position={[10, 10, 10]} intensity={1.5} />
+                                    <pointLight position={[-10, 5, 5]} intensity={0.8} />
+                                </>
+                            )}
+
+                            {currentCharacter.type === 'hologram' ? (
+                                <Suspense fallback={null}>
+                                    <JarvisHologram
+                                        state={avatarState.isSpeaking ? 'speaking' : avatarState.isThinking ? 'thinking' : avatarState.isListening ? 'listening' : 'idle'}
+                                        mood="neutral"
+                                        size="large"
                                     />
-                                )}
-                            </Suspense>
-                        )}
-                    </Canvas>
+                                </Suspense>
+                            ) : (
+                                <Suspense fallback={null}>
+                                    {windowReady && (
+                                        <OptimizedVRMModel
+                                            key={currentCharacter.id}
+                                            url={currentCharacter.model}
+                                            scale={activeVrmConfig.scale}
+                                            position={activeVrmConfig.position}
+                                            dragOffset={[
+                                                characterPosition.x / (windowSize.width / 6),
+                                                -characterPosition.y / (windowSize.height / 4),
+                                            ]}
+                                            isSpeaking={avatarState.isSpeaking}
+                                            expression={currentEmotion === 'thinking' ? 'thinking' : currentEmotion}
+                                            enableLookAt={settings.mouseTracking}
+                                            enableBlink={true}
+                                            onHoverIn={() => {
+                                                window.nizhal?.character?.setClickThrough?.(false);
+                                                setIsClickThrough(false);
+                                            }}
+                                            onHoverOut={() => {
+                                                window.nizhal?.character?.setClickThrough?.(true);
+                                                setIsClickThrough(true);
+                                            }}
+                                            onLoad={() => {
+                                                console.log('VRM loaded successfully:', currentCharacter.name);
+                                                setVrmLoaded(true);
+                                            }}
+                                            onError={(err) => {
+                                                console.error('VRM failed to load:', currentCharacter.model, err);
+                                                // Fallback to 2D on VRM load failure
+                                                if (isMobile) setDeviceTier('low');
+                                            }}
+                                        />
+                                    )}
+                                </Suspense>
+                            )}
+                        </Canvas>
+                    )}
 
                     {/* Dance indicator */}
                     {isDancing && (
@@ -985,9 +1151,9 @@ const CharacterApp = () => {
                     )
                 }
 
-                {/* Alt key indicator - shows interaction hint */}
+                {/* Desktop Alt key indicator - shows interaction hint */}
                 {
-                    isAltPressed && (
+                    !isMobile && isAltPressed && (
                         <motion.div
                             className="absolute top-2 left-1/2 -translate-x-1/2 bg-blue-500/80 text-white text-xs px-3 py-1 rounded-full pointer-events-none"
                             initial={{ opacity: 0, y: -10 }}
@@ -998,7 +1164,7 @@ const CharacterApp = () => {
                     )
                 }
                 {
-                    !isAltPressed && isClickThrough && !contextMenuOpen && !customizerOpen && (
+                    !isMobile && !isAltPressed && isClickThrough && !contextMenuOpen && !customizerOpen && (
                         <motion.div
                             className="absolute bottom-2 left-1/2 -translate-x-1/2 text-white/30 text-xs pointer-events-none"
                             initial={{ opacity: 0 }}
@@ -1009,6 +1175,29 @@ const CharacterApp = () => {
                         </motion.div>
                     )
                 }
+
+                {/* Mobile Bottom Navigation Layout constraints */}
+                {isMobile && (
+                    <motion.div 
+                        className="absolute bottom-0 w-full p-4 flex justify-around items-center bg-gradient-to-t from-black/80 to-transparent pointer-events-auto shadow-[0_-10px_20px_rgba(0,0,0,0.3)] z-50 rounded-t-3xl border-t border-white/10 backdrop-blur-md pb-6"
+                        initial={{ opacity: 0, y: 50 }}
+                        animate={{ opacity: 1, y: 0 }}
+                    >
+                        <button onClick={() => setContextMenuOpen(true)} className="flex flex-col items-center gap-1 opacity-70 hover:opacity-100 transition-opacity">
+                            <span className="text-2xl">✨</span>
+                            <span className="text-[10px] font-medium text-white tracking-wide">Actions</span>
+                        </button>
+                        
+                        <button onClick={handleAvatarClick} className="w-14 h-14 bg-blue-500/80 hover:bg-blue-400 rounded-full flex items-center justify-center text-2xl shadow-lg border-2 border-white/20 transform hover:scale-105 transition-all">
+                            🎤
+                        </button>
+
+                        <button onClick={() => handleSettingsToggle(true)} className="flex flex-col items-center gap-1 opacity-70 hover:opacity-100 transition-opacity">
+                            <span className="text-2xl">⚙️</span>
+                            <span className="text-[10px] font-medium text-white tracking-wide">Settings</span>
+                        </button>
+                    </motion.div>
+                )}
 
                 {/* Quick Menu (replaces old context menu) */}
                 <QuickMenu
@@ -1024,14 +1213,17 @@ const CharacterApp = () => {
                     settings={uiSettings}
                 />
 
-                {/* Unified Settings Panel */}
+                {/* Unified Settings Panel with Mobile Responsiveness */}
                 <AnimatePresence>
                     {settingsOpen && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => handleSettingsToggle(false)}>
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md animate-in fade-in duration-200" onClick={() => handleSettingsToggle(false)}>
                             <div
-                                className="w-[800px] h-[600px] bg-black/60 backdrop-blur-2xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl relative flex flex-col"
+                                className={`w-full ${isMobile ? 'h-full max-h-[90vh] mt-auto rounded-t-3xl pt-2' : 'h-[600px] max-w-[800px] rounded-2xl mx-4'} bg-black/80 backdrop-blur-2xl border border-white/10 overflow-hidden shadow-2xl relative flex flex-col`}
                                 onClick={(e) => e.stopPropagation()}
                             >
+                                {isMobile && (
+                                    <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-2" />
+                                )}
                                 <SettingsView
                                     onClose={() => handleSettingsToggle(false)}
                                     userProfile={userProfile}
@@ -1039,7 +1231,6 @@ const CharacterApp = () => {
                                     isModal={true}
                                     onPersonaChange={(persona) => {
                                         setPersonalityMode(persona.id);
-                                        // Also sync settings locally
                                         setSettings(prev => ({ ...prev, character: persona.id }));
                                     }}
                                 />

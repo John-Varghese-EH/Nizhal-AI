@@ -7,7 +7,7 @@ edition = "2021"
 
 [lib]
 name = "nizhal_ai_lib"
-crate-type = ["staticlib", "rlib"]
+crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -21,9 +21,7 @@ tauri-plugin-clipboard-manager = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-http = "2"
 tauri-plugin-shell = "2"
-tauri-plugin-global-shortcut = "2"
 tauri-plugin-opener = "2"
-tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
@@ -35,8 +33,15 @@ sysinfo = "0.32"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 log = "0.4"
-winapi = { version = "0.3", features = ["winuser", "windef"] }
 lazy_static = "1.5.0"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-single-instance = "2"
+
+
+
+# Windows-only dependencies  
+[target.'cfg(target_os = "windows")'.dependencies]
+winapi = { version = "0.3", features = ["winuser", "windef"] }
 
 [profile.release]
 opt-level = 3
@@ -44,3 +49,6 @@ lto = true
 codegen-units = 1
 strip = true
 panic = "abort"
+
+[profile.dev]
+opt-level = 0

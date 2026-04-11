@@ -8,7 +8,7 @@ import { LipSyncService } from '../../../services/LipSyncService';
 import TouchRegionSystem from './TouchRegionSystem';
 
 // Extend THREE objects for R3F (required in v8+)
-extend(THREE);
+
 
 /**
  * VRM Character Component - Renders the loaded VRM inside Three.js scene

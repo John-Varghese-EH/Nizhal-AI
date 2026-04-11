@@ -4,7 +4,7 @@ import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 
 // Extend THREE objects for R3F (required in v8+)
-extend(THREE);
+
 
 /**
  * ParticleSphereVisualizer - Audio-reactive 3D particle sphere

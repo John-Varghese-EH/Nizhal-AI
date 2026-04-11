@@ -8,7 +8,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, emit } from '@tauri-apps/api/event';
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { getCurrentWebviewWindow, WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
 // Detect if running in Tauri
 export const isTauri = !!(window && window.__TAURI_INTERNALS__);
@@ -92,12 +92,25 @@ export const windowControls = {
     minimize: () => invoke('minimize_window'),
     maximize: () => invoke('maximize_window'),
     close: () => invoke('close_window'),
-    showChat: () => invoke('show_chat_window'),
+    showChat: async () => {
+        try {
+            const mainWindow = await WebviewWindow.getByLabel('main');
+            if (mainWindow) {
+                await mainWindow.show();
+                await mainWindow.setFocus();
+            }
+        } catch(e) {
+            console.warn('[WindowControls] Failed to show chat window:', e);
+        }
+    },
     hideChat: () => invoke('hide_chat_window'),
     getState: () => invoke('get_window_state'),
     moveCharacter: (deltaX, deltaY) => invoke('set_character_position', { x: deltaX, y: deltaY }),
+    startDragging: () => getCurrentWebviewWindow().startDragging(),
     toggleDetection: async () => true,
     getCharacterPosition: () => invoke('get_character_position'),
+    getMonitors: () => invoke('get_available_monitors'),
+    setMonitor: (monitorName) => invoke('set_character_monitor', { monitorName }),
 };
 
 // ─── Character ──────────────────────────────────────────────────────────

@@ -8,9 +8,6 @@ import { getMouseInteractionService } from '../../../services/MouseInteractionSe
 import { touchRegionsService } from '../../../services/TouchRegions';
 import { getAdvancedAnimationEngine, InteractionType } from '../../../services/AdvancedAnimationEngine';
 
-// Extend THREE objects for R3F (required in v8+)
-extend(THREE);
-
 // Performance monitoring
 let performanceMode = 'standard'; // 'standard', 'low', 'minimal'
 let frameSkipCounter = 0;
@@ -42,6 +39,7 @@ const OptimizedVRMModel = React.memo(({
     url,
     scale = 1,
     position = [0, 0, 0],
+    dragOffset = [0, 0],
     enableLookAt = true,
     enableBlink = true,
     expression = 'neutral',
@@ -65,6 +63,7 @@ const OptimizedVRMModel = React.memo(({
     const lastStateRef = useRef(null);
     const idleGestureTimerRef = useRef(0);
     const lastClickTimeRef = useRef(0);
+    const activeVrmRef = useRef(null);
 
     // Head pat detection logic
     const moveHistoryRef = useRef([]);
@@ -87,7 +86,17 @@ const OptimizedVRMModel = React.memo(({
                 loader.load(
                     url,
                     (gltf) => {
-                        if (!mounted) return;
+                        if (!mounted) {
+                            // Prevent memory leak if component unmounted before load finished
+                            gltf.scene.traverse((obj) => {
+                                if (obj.geometry) obj.geometry.dispose();
+                                if (obj.material) {
+                                    if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                                    else obj.material.dispose();
+                                }
+                            });
+                            return;
+                        }
                         const loadedVrm = gltf.userData.vrm;
                         if (loadedVrm) {
                             // Apply VRM optimizations (from official three-vrm examples)
@@ -123,6 +132,7 @@ const OptimizedVRMModel = React.memo(({
                             }
 
                             console.log('VRM loaded:', loadedVrm.meta?.name || url);
+                            activeVrmRef.current = loadedVrm;
                             setVrm(loadedVrm);
                             onLoad?.(loadedVrm);
                         } else {
@@ -150,7 +160,7 @@ const OptimizedVRMModel = React.memo(({
 
         loadModel();
 
-        // Cleanup when URL changes (model switch)
+        // Cleanup when URL changes (model switch) or unmount
         return () => {
             mounted = false;
             // Dispose animation service to allow reinitialization with new VRM
@@ -158,6 +168,23 @@ const OptimizedVRMModel = React.memo(({
                 vrmaServiceRef.current.dispose();
                 console.log('[OptimizedVRMModel] Animation service disposed for model change');
             }
+            // Dispose VRM scene graph to prevent duplicate ghosts in Three.js memory during StrictMode / HMR
+            if (activeVrmRef.current && activeVrmRef.current.scene) {
+                const currentVrm = activeVrmRef.current;
+                currentVrm.scene.traverse((obj) => {
+                    if (obj.geometry) obj.geometry.dispose();
+                    if (obj.material) {
+                        if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                        else obj.material.dispose();
+                    }
+                });
+                if (currentVrm.scene.parent) {
+                    currentVrm.scene.parent.remove(currentVrm.scene);
+                }
+                activeVrmRef.current = null;
+            }
+            // State updates after unmount are ignored, but we do it for completeness
+            setVrm(null);
         };
     }, [url]);
 
@@ -187,18 +214,8 @@ const OptimizedVRMModel = React.memo(({
     useFrame((state, delta) => {
         if (!vrm) return;
 
-        frameCountRef.current++;
-        
-        // Performance optimization: skip frames on low-end mode
-        if (performanceMode === 'low') {
-            frameSkipCounter++;
-            if (frameSkipCounter % FRAME_SKIP_THRESHOLD !== 0) {
-                return; // Skip this frame
-            }
-        }
-
         // Adaptive quality based on performance mode
-        const dt = performanceMode === 'minimal' ? delta * 2 : delta;
+        const dt = delta;
 
         // Required for VRM visibility and spring bones
         vrm.update(dt);
@@ -368,15 +385,17 @@ const OptimizedVRMModel = React.memo(({
     if (!vrm) return null;
 
     return (
-        <primitive
-            object={vrm.scene}
-            scale={scale}
-            position={position}
-            onClick={handleClick}
-            onPointerOver={handlePointerOver}
-            onPointerOut={handlePointerOut}
-            onPointerMove={handlePointerMove}
-        />
+        <group position={[dragOffset[0], dragOffset[1], 0]}>
+            <primitive
+                object={vrm.scene}
+                scale={scale}
+                position={position}
+                onClick={handleClick}
+                onPointerOver={handlePointerOver}
+                onPointerOut={handlePointerOut}
+                onPointerMove={handlePointerMove}
+            />
+        </group>
     );
 }, (prevProps, nextProps) => {
     // Custom comparison to prevent re-renders when only callbacks change
@@ -386,7 +405,8 @@ const OptimizedVRMModel = React.memo(({
            prevProps.enableBlink === nextProps.enableBlink &&
            prevProps.expression === nextProps.expression &&
            prevProps.isSpeaking === nextProps.isSpeaking &&
-           JSON.stringify(prevProps.position) === JSON.stringify(nextProps.position);
+           JSON.stringify(prevProps.position) === JSON.stringify(nextProps.position) &&
+           JSON.stringify(prevProps.dragOffset) === JSON.stringify(nextProps.dragOffset);
 });
 
 /**

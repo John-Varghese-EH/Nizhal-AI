@@ -17,6 +17,7 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
     const [providerStatus, setProviderStatus] = useState(null);
     const [activeTab, setActiveTab] = useState('general');
     const [availableModels, setAvailableModels] = useState([]);
+    const [availableMonitors, setAvailableMonitors] = useState([]);
     const [showLegalModal, setShowLegalModal] = useState(null);
 
     // Secrets Management State
@@ -109,6 +110,7 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
 
             const status = await window.nizhal?.ai.getProviderStatus();
             const models = await window.nizhal?.ai.getModels();
+            const monitors = await window.nizhal?.windowControls?.getMonitors?.();
 
             setPreferences(prefs || {});
 
@@ -124,6 +126,7 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
             setAiProviders(providers || []);
             setProviderStatus(status || {});
             setAvailableModels(models || []);
+            setAvailableMonitors(monitors || []);
         } catch (error) {
             console.error('Failed to load settings:', error);
         }
@@ -624,6 +627,47 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
                                             className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                                         />
                                     </div>
+
+                                    <div>
+                                        <div className="flex justify-between text-sm mb-1">
+                                            <span className="text-white/60">Character Scale</span>
+                                            <span className="text-white/40">{Math.round((preferences.characterScale || 1.0) * 100)}%</span>
+                                        </div>
+                                        <input
+                                            type="range"
+                                            min="0.5"
+                                            max="2.0"
+                                            step="0.1"
+                                            value={preferences.characterScale || 1.0}
+                                            onChange={async (e) => {
+                                                const val = parseFloat(e.target.value);
+                                                handlePreferenceChange('characterScale', val);
+                                                // Sync with unified state for immediate effect
+                                                await window.nizhal?.state?.set?.('ui.characterScale', val);
+                                            }}
+                                            className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                                        />
+                                    </div>
+
+                                    {availableMonitors && availableMonitors.length > 0 && (
+                                        <SettingRow label="Display Monitor" description="Select which screen to show on">
+                                            <select
+                                                value={preferences.characterMonitor || availableMonitors[0]}
+                                                onChange={async (e) => {
+                                                    const val = e.target.value;
+                                                    handlePreferenceChange('characterMonitor', val);
+                                                    await window.nizhal?.windowControls?.setMonitor?.(val);
+                                                }}
+                                                className="bg-black/20 border border-white/10 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-indigo-500/50"
+                                            >
+                                                {availableMonitors.map((mon) => (
+                                                    <option key={mon} value={mon} className="bg-gray-900">
+                                                        {mon}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </SettingRow>
+                                    )}
 
                                     <SettingRow label="Click Through" description="Allow clicking windows behind character">
                                         <Toggle

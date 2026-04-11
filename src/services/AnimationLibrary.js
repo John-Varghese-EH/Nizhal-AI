@@ -17,23 +17,21 @@
  * 18_Lovely_World.vrma, 19_Cute_Sparkle_World.vrma, 20_Connected_World.vrma
  */
 const ANIMATION_CATALOG = {
-    // Idle animations - subtle movements for standing
+    // Idle animations - ONLY upright standing animations (no sit/step to prevent horizontal bug)
     idle: [
         { name: 'motion_pose', path: '/assets/animations/08_Motion_Pose.vrma', duration: 8.0, loop: true },
-        { name: 'step', path: '/assets/animations/10_Step.vrma', duration: 3.0, loop: true },
-        { name: 'sit', path: '/assets/animations/15_Sit.vrma', duration: 5.0, loop: true },
+        { name: 'model_pose', path: '/assets/animations/06_Model_Pose.vrma', duration: 5.0, loop: true },
+        { name: 'show_full_body', path: '/assets/animations/01_Show_Full_Body.vrma', duration: 10.0, loop: true },
     ],
 
     // Greeting animations
     greeting: [
         { name: 'greeting', path: '/assets/animations/02_Greeting.vrma', duration: 3.0, loop: false },
         { name: 'hello', path: '/assets/animations/11_Hello.vrma', duration: 3.0, loop: false },
-        { name: 'show_full_body', path: '/assets/animations/01_Show_Full_Body.vrma', duration: 10.0, loop: false },
     ],
 
     // Pose animations
     pose: [
-        { name: 'model_pose', path: '/assets/animations/06_Model_Pose.vrma', duration: 5.0, loop: true },
         { name: 'peace_sign', path: '/assets/animations/03_Peace_Sign.vrma', duration: 4.0, loop: false },
         { name: 'shoot', path: '/assets/animations/04_Shoot.vrma', duration: 3.0, loop: false },
     ],
@@ -44,17 +42,22 @@ const ANIMATION_CATALOG = {
         { name: 'smartphone', path: '/assets/animations/12_Smartphone.vrma', duration: 4.0, loop: true },
         { name: 'squat', path: '/assets/animations/07_Squat.vrma', duration: 4.0, loop: true },
         { name: 'warm_up', path: '/assets/animations/14_Warm_Up.vrma', duration: 4.0, loop: true },
+        { name: 'step', path: '/assets/animations/10_Step.vrma', duration: 3.0, loop: false },
     ],
 
     // Reaction/Expression animations
     reaction: [
         { name: 'bow', path: '/assets/animations/09_Bow.vrma', duration: 3.0, loop: false },
-        { name: 'step', path: '/assets/animations/10_Step.vrma', duration: 2.0, loop: false },
+    ],
+
+    // Sitting animations - ONLY used when explicitly in SITTING state
+    sitting: [
+        { name: 'sit', path: '/assets/animations/15_Sit.vrma', duration: 5.0, loop: true },
     ],
 
     // Dance animations
     dance: [
-        { name: 'spin', path: '/assets/animations/05_Spin.vrma', duration: 6.0, loop: true },
+        { name: 'show_full_body', path: '/assets/animations/01_Show_Full_Body.vrma', duration: 10.0, loop: true },
     ],
 
     // Special choreography animations (World series)
@@ -73,16 +76,16 @@ const ANIMATION_CATALOG = {
 const STATE_ANIMATION_MAP = {
     'idle': { category: 'idle', preference: 'motion_pose', fallback: 'motion_pose' },
     'speaking': { category: 'idle', preference: 'motion_pose', fallback: 'motion_pose' },
-    'thinking': { category: 'idle', preference: 'motion_pose', fallback: 'motion_pose' },
+    'thinking': { category: 'idle', preference: 'model_pose', fallback: 'motion_pose' },
     'listening': { category: 'idle', preference: 'motion_pose', fallback: 'motion_pose' },
-    'dancing': { category: 'dance', preference: 'spin', fallback: 'spin' },
+    'dancing': { category: 'dance', preference: 'show_full_body', fallback: 'show_full_body' },
     'greeting': { category: 'greeting', preference: 'greeting', fallback: 'hello' },
     'happy': { category: 'greeting', preference: 'hello', fallback: 'motion_pose' },
     'surprised': { category: 'reaction', preference: 'bow', fallback: 'motion_pose' },
-    'sleeping': { category: 'idle', preference: 'sit', fallback: 'motion_pose' },
-    'dragging': { category: 'pose', preference: 'model_pose', fallback: 'motion_pose' },
-    'sitting': { category: 'idle', preference: 'sit', fallback: 'motion_pose' },
-    'posing': { category: 'pose', preference: 'model_pose', fallback: 'peace_sign' },
+    'sleeping': { category: 'sitting', preference: 'sit', fallback: 'motion_pose' },
+    'dragging': { category: 'idle', preference: 'motion_pose', fallback: 'motion_pose' },
+    'sitting': { category: 'sitting', preference: 'sit', fallback: 'motion_pose' },
+    'posing': { category: 'pose', preference: 'peace_sign', fallback: 'shoot' },
     'celebrating': { category: 'special', preference: 'random', fallback: 'smile_world' },
     'working': { category: 'action', preference: 'smartphone', fallback: 'motion_pose' },
     'exercising': { category: 'action', preference: 'warm_up', fallback: 'squat' },

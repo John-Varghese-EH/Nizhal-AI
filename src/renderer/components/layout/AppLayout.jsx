@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     MessageSquare, Activity, Settings,
     Shield, ShieldOff, Mic, MicOff,
-    Video, VideoOff, X, Phone
+    Video, VideoOff, X, Phone, Maximize, Minimize
 } from 'lucide-react';
 import WindowControls from '../WindowControls';
 import CameraFeed from '../CameraFeed';
@@ -31,8 +31,9 @@ const AppLayout = ({
     onMirrorToggle,
     windowMode = 'compact' // 'full' | 'compact'
 }) => {
-    // State for user preferences
+    // State for user preferences and camera
     const [objectDetectionEnabled, setObjectDetectionEnabled] = useState(false);
+    const [isFullscreenCamera, setIsFullscreenCamera] = useState(false);
 
     // Load object detection preference
     useEffect(() => {
@@ -247,27 +248,39 @@ const AppLayout = ({
                         initial={{ opacity: 0, scale: 0.8, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.8, y: 20 }}
-                        className={`absolute z-[100] rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/10 bg-black/80 backdrop-blur-xl ${isCompact ? 'bottom-24 right-4 w-36 h-52' : 'bottom-8 right-8 w-72 h-52'
-                            }`}
-                        drag
+                        className={`absolute z-[100] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] bg-black/80 backdrop-blur-xl ${
+                            isFullscreenCamera 
+                                ? 'inset-0 w-full h-full rounded-none border-0' 
+                                : `rounded-2xl border border-white/10 ${isCompact ? 'bottom-24 right-4 w-36 h-52' : 'bottom-8 right-8 w-72 h-52'}`
+                        }`}
+                        drag={!isFullscreenCamera}
                         dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
                         dragMomentum={false}
                     >
-                        <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-black/40 to-transparent pointer-events-none z-10" />
+                        <div className="absolute top-0 left-0 right-0 h-10 bg-gradient-to-b from-black/60 to-transparent pointer-events-none z-10" />
                         <CameraFeed
                             enabled={true}
                             onToggle={onCameraToggle}
                             showControls={false}
-                            enableObjectDetection={objectDetectionEnabled}
+                            showSwitchControl={true}
+                            enableObjectDetection={isFullscreenCamera || objectDetectionEnabled}
                             className="w-full h-full"
                         />
-                        {/* Overlay Close Button */}
-                        <button
-                            onClick={onCameraToggle}
-                            className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-full text-white/50 hover:text-white hover:bg-red-500/80 transition-all z-20 backdrop-blur-md"
-                        >
-                            <X size={12} />
-                        </button>
+                        {/* Overlay Controls */}
+                        <div className="absolute top-2 right-2 flex items-center gap-2 z-20">
+                            <button
+                                onClick={() => setIsFullscreenCamera(!isFullscreenCamera)}
+                                className="p-1.5 bg-black/60 rounded-full text-white/70 hover:text-white hover:bg-black/90 transition-all backdrop-blur-md"
+                            >
+                                {isFullscreenCamera ? <Minimize size={14} /> : <Maximize size={14} />}
+                            </button>
+                            <button
+                                onClick={onCameraToggle}
+                                className="p-1.5 bg-black/60 rounded-full text-white/70 hover:text-white hover:bg-red-500/80 transition-all backdrop-blur-md"
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
                     </motion.div>
                 )}
             </AnimatePresence>
