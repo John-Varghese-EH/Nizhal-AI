@@ -9,10 +9,9 @@
   **"More than just an assistant. A friend who lives right on your desktop, understands your emotions, and grows with you every day-now faster and lighter than ever."**
 
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue.svg?style=for-the-badge&logo=windows)](https://tauri.app)
-  [![Status](https://img.shields.io/badge/status-Alpha-brightpink.svg?style=for-the-badge&logo=rocket)]()
+  [![Status](https://img.shields.io/badge/status-Alpha-pink.svg?style=for-the-badge&logo=rocket)]()
   [![Tauri](https://img.shields.io/badge/tauri-v2.0-FFC131.svg?style=for-the-badge&logo=tauri)](https://tauri.app)
   [![Rust](https://img.shields.io/badge/rust-backend-orange.svg?style=for-the-badge&logo=rust)](https://rust-lang.org)
-  [![Optimization](https://img.shields.io/badge/optimization-ultra--light-success.svg?style=for-the-badge&logo=speedtest)](https://rust-lang.org)
   [![Stars](https://img.shields.io/github/stars/John-Varghese-EH/Nizhal-AI?style=for-the-badge&logo=github&label=⭐%20Stars)](https://github.com/John-Varghese-EH/Nizhal-AI)
 
   <br/>
