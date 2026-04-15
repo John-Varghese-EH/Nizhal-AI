@@ -6,7 +6,8 @@
   
   ### **Your Intelligent Desktop Screen Mate**
   
-  **"More than just an assistant. A friend who lives right on your desktop, understands your emotions, and grows with you every day-now faster and lighter than ever."**
+  **"More than just an assistant. A friend who lives right on your desktop, understands your emotions, and grows with you every day
+-now faster and lighter than ever."**
 
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue.svg?style=for-the-badge&logo=windows)](https://tauri.app)
   [![Status](https://img.shields.io/badge/status-Alpha-pink.svg?style=for-the-badge&logo=rocket)]()
@@ -33,7 +34,6 @@
 </div>
 
 ---
-
 > [!TIP]
 > **What's New?** 
 > Nizhal AI has been completely rewritten from Electron to **Tauri v2** using **Rust**! This means insanely fast startup times, highly optimized CPU/RAM usage (running effortlessly on low-end hardware), and sweeping new **Cross-Platform** magic across Windows, Linux, and macOS.
@@ -59,7 +59,7 @@
       </td>
       <td align="center" style="padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 15px; color: white; margin: 10px;">
         <h3>🍎🐧 Cross-Platform Native</h3>
-        <p>Proper first-class support for Windows, macOS, and Linux (X11/Wayland) with OS-specific native features.</p>
+        <p>Proper first-class support for Windows, macOS, and Linux (X11/Wayland) with OS-specific native features, also have partial support for Android, ChromeOS and iOS.</p>
         <div style="font-size: 2em;">🌍</div>
       </td>
       <td align="center" style="padding: 20px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border-radius: 15px; color: white; margin: 10px;">
@@ -141,7 +141,7 @@
 
 ---
 
-## 🌟 **What makes the Rust Screen Mate special?**
+## 🌟 **What makes the Rust based Nizhal-AI Screen Mate special?**
 
 We've supercharged Nizhal AI with cutting-edge capabilities that make it the most comprehensive desktop companion available!
 
