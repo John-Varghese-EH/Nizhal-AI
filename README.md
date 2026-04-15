@@ -9,7 +9,7 @@
   **"More than just an assistant. A friend who lives right on your desktop, understands your emotions, and grows with you every day-now faster and lighter than ever."**
 
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue.svg?style=for-the-badge&logo=windows)](https://tauri.app)
-  [![Status](https://img.shields.io/badge/status-Active%20Development-brightgreen.svg?style=for-the-badge&logo=rocket)]()
+  [![Status](https://img.shields.io/badge/status-Alpha-brightpink.svg?style=for-the-badge&logo=rocket)]()
   [![Tauri](https://img.shields.io/badge/tauri-v2.0-FFC131.svg?style=for-the-badge&logo=tauri)](https://tauri.app)
   [![Rust](https://img.shields.io/badge/rust-backend-orange.svg?style=for-the-badge&logo=rust)](https://rust-lang.org)
   [![Optimization](https://img.shields.io/badge/optimization-ultra--light-success.svg?style=for-the-badge&logo=speedtest)](https://rust-lang.org)
@@ -38,6 +38,12 @@
 > [!TIP]
 > **What's New?** 
 > Nizhal AI has been completely rewritten from Electron to **Tauri v2** using **Rust**! This means insanely fast startup times, highly optimized CPU/RAM usage (running effortlessly on low-end hardware), and sweeping new **Cross-Platform** magic across Windows, Linux, and macOS.
+---
+> [!NOTE]
+> **🚧 Work in Progress:**  
+> This project is actively being developed! Contributions, feedback, and ideas are welcome.  
+> *Star the repo and join the project!*
+---
 
 ## 🌟 **Why Choose Nizhal AI?**
 
