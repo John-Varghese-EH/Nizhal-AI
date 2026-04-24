@@ -26,7 +26,7 @@ src-tauri/gen
 /Reference
 PAYMENT.md
 
-# AI Agents & Automation
+
 .agent/
 .agent**
 claude.md
@@ -38,3 +38,8 @@ skills/
 brain/
 agent_logs/
 *.agent
+.claude/
+.windsurf/
+.cursor/
+.gemini/
+.uipro/
