@@ -96,6 +96,7 @@ pub async fn get_performance_mode(
 
 #[tauri::command]
 pub async fn open_external_url(url: String) -> Result<(), String> {
+    super::validation::validate_url(&url)?;
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("cmd")
@@ -136,4 +137,161 @@ pub async fn get_app_theme() -> Result<String, String> {
     // In Tauri, theme detection is best done on the frontend
     // This returns a default and the frontend overrides with CSS media query
     Ok("dark".to_string())
+}
+
+#[tauri::command]
+pub async fn check_pipewire_status() -> Result<bool, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let output = std::process::Command::new("pgrep")
+            .arg("pipewire")
+            .output();
+        if let Ok(out) = output {
+            if !out.stdout.is_empty() {
+                return Ok(true);
+            }
+        }
+        // Fallback: check pulseaudio / pactl
+        let pactl = std::process::Command::new("pactl")
+            .arg("info")
+            .output();
+        if let Ok(p_out) = pactl {
+            let stdout = String::from_utf8_lossy(&p_out.stdout);
+            if stdout.contains("PipeWire") || stdout.contains("PulseAudio") {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        // On Windows and macOS, we assume the native host sound system (CoreAudio/WASAPI) is healthy
+        Ok(true)
+    }
+}
+
+#[tauri::command]
+pub async fn check_xdg_portal() -> Result<bool, String> {
+    #[cfg(target_os = "linux")]
+    {
+        // Check if org.freedesktop.portal.Desktop name exists on dbus session bus.
+        let output = std::process::Command::new("dbus-send")
+            .args([
+                "--session",
+                "--dest=org.freedesktop.DBus",
+                "--type=method_call",
+                "--print-reply",
+                "/org/freedesktop/DBus",
+                "org.freedesktop.DBus.NameHasOwner",
+                "string:org.freedesktop.portal.Desktop"
+            ])
+            .output();
+
+        match output {
+            Ok(out) => {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                if stdout.contains("boolean true") {
+                    return Ok(true);
+                }
+                
+                // Fallback: check if busctl lists the portal
+                let busctl_out = std::process::Command::new("busctl")
+                    .args(["--user", "list"])
+                    .output();
+                if let Ok(b_out) = busctl_out {
+                    let b_stdout = String::from_utf8_lossy(&b_out.stdout);
+                    if b_stdout.contains("org.freedesktop.portal.Desktop") {
+                        return Ok(true);
+                    }
+                }
+                
+                // If not running, check if portal process is active
+                let pgrep = std::process::Command::new("pgrep")
+                    .arg("xdg-desktop-por")
+                    .output();
+                if let Ok(p_out) = pgrep {
+                    if !p_out.stdout.is_empty() {
+                        return Ok(true);
+                    }
+                }
+                
+                Ok(false)
+            }
+            Err(_) => {
+                let pgrep = std::process::Command::new("pgrep")
+                    .arg("xdg-desktop-por")
+                    .output();
+                if let Ok(p_out) = pgrep {
+                    if !p_out.stdout.is_empty() {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            }
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        // Non-Linux platforms do not require xdg-desktop-portal
+        Ok(true)
+    }
+}
+
+#[tauri::command]
+#[allow(unused_variables)]
+pub async fn open_system_permission_settings(permission_type: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let target = if permission_type == "camera" {
+            "ms-settings:privacy-webcam"
+        } else {
+            "ms-settings:privacy-microphone"
+        };
+        std::process::Command::new("cmd")
+            .args(["/C", "start", target])
+            .spawn()
+            .map_err(|e| format!("Failed to open Windows settings: {}", e))?;
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        let target = if permission_type == "camera" {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"
+        } else {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+        };
+        std::process::Command::new("open")
+            .arg(target)
+            .spawn()
+            .map_err(|e| format!("Failed to open macOS settings: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let mut opened = false;
+        
+        // Try gnome-control-center
+        if std::process::Command::new("gnome-control-center")
+            .arg("privacy")
+            .spawn()
+            .is_ok() 
+        {
+            opened = true;
+        }
+        
+        // Try systemsettings (KDE)
+        if !opened && std::process::Command::new("systemsettings")
+            .arg("kcm_pulseaudio")
+            .spawn()
+            .is_ok()
+        {
+            opened = true;
+        }
+        
+        if !opened {
+            return Err("Could not locate GNOME or KDE system settings pane. Please enable permission manually in your DE settings.".to_string());
+        }
+    }
+    
+    Ok(())
 }

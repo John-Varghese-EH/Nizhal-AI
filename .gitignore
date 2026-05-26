@@ -35,7 +35,7 @@ skills/
 .cursor/
 .cursorrules
 .gemini/
-brain/
+/brain/
 agent_logs/
 *.agent
 .claude/
@@ -43,3 +43,8 @@ agent_logs/
 .cursor/
 .gemini/
 .uipro/
+
+# Allow Nizhal AI v2 brain module
+!Nizhal-AI-v2/brain/
+*.md
+/promo-site

@@ -1,14 +1,12 @@
 /**
  * LiveKitVoiceService.js
- * Frontend service for managing LiveKit voice connections
+ *
+ * Manage real-time bidirectional WebRTC voice streaming using the LiveKit Client SDK.
+ * Renders high-fidelity audio streams strictly inside off-screen media elements,
+ * maintaining clean architectural separation from the React DOM tree.
  */
 
-import {
-    Room,
-    RoomEvent,
-    Track,
-    createLocalAudioTrack,
-} from 'livekit-client';
+import { Room, RoomEvent, Track, createLocalAudioTrack } from 'livekit-client';
 
 export class LiveKitVoiceService {
     constructor() {
@@ -18,8 +16,10 @@ export class LiveKitVoiceService {
         this.isConnecting = false;
         this.isMuted = false;
         this.agentAudioElement = null;
+        this.watchdogTimer = null;
+        this.lastHeartbeat = Date.now();
 
-        // Callbacks
+        // Service observers
         this.onConnected = null;
         this.onDisconnected = null;
         this.onSpeakingChanged = null;
@@ -27,29 +27,39 @@ export class LiveKitVoiceService {
         this.onEmotion = null;
         this.onError = null;
 
-        console.log('[LiveKitVoice] Service initialized');
+        console.log('[LiveKitVoiceService] Service initialized');
     }
 
     /**
-     * Connect to a LiveKit room
-     * @param {string} token - JWT token from server
-     * @param {string} url - LiveKit server URL
+     * Initializes parameters and runs a defensive self-clean up.
+     */
+    async init() {
+        try {
+            await this.reset();
+            this.startWatchdog();
+            return { success: true };
+        } catch (error) {
+            console.error('[LiveKitVoiceService] Initialization error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
+     * Establish Webrtc room link.
      */
     async connect(token, url) {
         if (this.isConnected) {
-            console.log('[LiveKitVoice] Already connected');
             return { success: true };
         }
 
         if (this.isConnecting) {
-            console.log('[LiveKitVoice] Connection already in progress');
             return { success: false, error: 'Connection in progress' };
         }
 
         this.isConnecting = true;
+        this.lastHeartbeat = Date.now();
 
         try {
-            // Create room
             this.room = new Room({
                 adaptiveStream: true,
                 dynacast: true,
@@ -60,23 +70,18 @@ export class LiveKitVoiceService {
                 },
             });
 
-            // Setup event listeners
             this.setupEventListeners();
-
-            // Connect to room
             await this.room.connect(url, token);
 
-            // Check if we were disconnected during connection (race condition)
             if (!this.room || this.room.state === 'disconnected') {
-                throw new Error('Connection was aborted');
+                throw new Error('Connection aborted mid-flight');
             }
 
-            // Publish microphone
             await this.publishMicrophone();
 
             this.isConnected = true;
             this.isConnecting = false;
-            console.log('[LiveKitVoice] Connected successfully');
+            this.lastHeartbeat = Date.now();
 
             if (this.onConnected) {
                 this.onConnected();
@@ -85,15 +90,14 @@ export class LiveKitVoiceService {
             return { success: true };
         } catch (error) {
             this.isConnecting = false;
+            this.isConnected = false;
 
-            // Don't log "Client initiated disconnect" as an error - it's expected during cleanup
             if (error.message?.includes('Client initiated disconnect') ||
-                error.message?.includes('Connection was aborted')) {
-                console.log('[LiveKitVoice] Connection cancelled');
+                error.message?.includes('Connection aborted')) {
                 return { success: false, error: 'Connection cancelled' };
             }
 
-            console.error('[LiveKitVoice] Connection failed:', error);
+            console.error('[LiveKitVoiceService] Connection failed:', error);
 
             if (this.onError) {
                 this.onError(error);
@@ -104,35 +108,47 @@ export class LiveKitVoiceService {
     }
 
     /**
-     * Setup room event listeners
+     * Listen to active WebRTC events.
      */
     setupEventListeners() {
         if (!this.room) return;
 
-        // Track published - AI agent voice
+        // Subscribed to AI agent audio track
         this.room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-            console.log('[Live Kit Voice] Track subscribed:', participant.identity);
+            console.log('[LiveKitVoiceService] Subscribed to audio track from:', participant.identity);
 
             if (track.kind === Track.Kind.Audio) {
-                // Create audio element for agent voice
-                if (!this.agentAudioElement) {
+                try {
+                    // Detach any pre-existing stream element
+                    if (this.agentAudioElement) {
+                        try {
+                            track.detach(this.agentAudioElement);
+                        } catch (e) {}
+                    }
+
+                    // Attach off-screen media context. Appending to document.body is bypassed
+                    // as modern browsers render fully interactive audio via detached media elements.
                     this.agentAudioElement = track.attach();
                     this.agentAudioElement.volume = 1.0;
-                    document.body.appendChild(this.agentAudioElement);
-                }
 
-                if (this.onAgentSpeaking) {
-                    this.onAgentSpeaking(true);
+                    if (this.onAgentSpeaking) {
+                        this.onAgentSpeaking(true);
+                    }
+                } catch (err) {
+                    console.error('[LiveKitVoiceService] Failed to attach audio context:', err);
                 }
             }
         });
 
-        // Track unsubscribed
+        // Unsubscribed / Cleanup track
         this.room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
-            console.log('[LiveKitVoice] Track unsubscribed:', participant.identity);
+            console.log('[LiveKitVoiceService] Track unsubscribed from:', participant.identity);
 
             if (track.kind === Track.Kind.Audio && this.agentAudioElement) {
-                track.detach(this.agentAudioElement);
+                try {
+                    track.detach(this.agentAudioElement);
+                } catch (e) {}
+                this.agentAudioElement = null;
 
                 if (this.onAgentSpeaking) {
                     this.onAgentSpeaking(false);
@@ -140,8 +156,9 @@ export class LiveKitVoiceService {
             }
         });
 
-        // Speaking status changes
+        // Speaking changes
         this.room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+            this.lastHeartbeat = Date.now();
             if (this.onSpeakingChanged) {
                 this.onSpeakingChanged(speakers);
             }
@@ -149,146 +166,197 @@ export class LiveKitVoiceService {
 
         // Disconnected
         this.room.on(RoomEvent.Disconnected, (reason) => {
-            console.log('[LiveKitVoice] Disconnected:', reason);
+            console.log('[LiveKitVoiceService] WebRTC disconnected:', reason);
             this.isConnected = false;
+            this.isConnecting = false;
 
             if (this.onDisconnected) {
                 this.onDisconnected(reason);
             }
         });
 
-        // Connection state changed
+        // Connection shifts
         this.room.on(RoomEvent.ConnectionStateChanged, (state) => {
-            console.log('[LiveKitVoice] Connection state:', state);
+            this.lastHeartbeat = Date.now();
+            console.log('[LiveKitVoiceService] Connection state shift:', state);
         });
 
-        // Data received (Emotion / State)
+        // Backend telemetry data (e.g. emotion mapping)
         this.room.on(RoomEvent.DataReceived, (payload, participant, kind, topic) => {
+            this.lastHeartbeat = Date.now();
             try {
                 const decoder = new TextDecoder();
                 const strData = decoder.decode(payload);
                 const data = JSON.parse(strData);
 
-                console.log('[LiveKitVoice] Data received:', data);
-
-                if (data.type === 'emotion') {
-                    if (this.onEmotion) {
-                        this.onEmotion(data.emotion);
-                    }
-                } else if (data.type === 'state') {
-                    if (this.onAgentSpeaking && data.isSpeaking !== undefined) {
-                        // We still use audio track detection as primary, but this is a good backup/sync
-                        // this.onAgentSpeaking(data.isSpeaking);
-                    }
+                if (data.type === 'emotion' && this.onEmotion) {
+                    this.onEmotion(data.emotion);
                 }
             } catch (error) {
-                console.error('[LiveKitVoice] Failed to parse data:', error);
+                console.error('[LiveKitVoiceService] Failed to decode inbound data packet:', error);
             }
         });
 
-        // Reconnecting
         this.room.on(RoomEvent.Reconnecting, () => {
-            console.log('[LiveKitVoice] Reconnecting...');
+            console.warn('[LiveKitVoiceService] Connection weak. Reconnecting...');
         });
 
-        // Reconnected
         this.room.on(RoomEvent.Reconnected, () => {
-            console.log('[LiveKitVoice] Reconnected');
+            this.lastHeartbeat = Date.now();
+            console.log('[LiveKitVoiceService] Connection restored successfully');
         });
     }
 
     /**
-     * Publish microphone audio
+     * Publishes microphone tracks to the active LiveKit workspace.
      */
     async publishMicrophone() {
         if (!this.room || this.localAudioTrack) return;
 
         try {
-            // Create local audio track
             this.localAudioTrack = await createLocalAudioTrack({
                 autoGainControl: true,
                 echoCancellation: true,
                 noiseSuppression: true,
             });
 
-            // Publish to room
             await this.room.localParticipant.publishTrack(this.localAudioTrack);
-
-            console.log('[LiveKitVoice] Microphone published');
+            console.log('[LiveKitVoiceService] Microphone track published successfully');
         } catch (error) {
-            console.error('[LiveKitVoice] Failed to publish microphone:', error);
+            console.error('[LiveKitVoiceService] Microphone publish failed:', error);
             throw error;
         }
     }
 
     /**
-     * Toggle mute status
+     * Toggles hardware microphone mute status.
      */
     async toggleMute() {
         if (!this.localAudioTrack) {
-            return { success: false, error: 'No audio track' };
+            return { success: false, error: 'No active local audio track available' };
         }
 
         try {
             this.isMuted = !this.isMuted;
             await this.localAudioTrack.setMuted(this.isMuted);
-
-            console.log('[LiveKitVoice] Muted:', this.isMuted);
             return { success: true, muted: this.isMuted };
         } catch (error) {
-            console.error('[LiveKitVoice] Failed to toggle mute:', error);
+            console.error('[LiveKitVoiceService] Failed to toggle mute state:', error);
             return { success: false, error: error.message };
         }
     }
 
     /**
-     * Disconnect from the room
+     * Terminate and clean up current active room states.
      */
     async disconnect() {
-        if (!this.room) {
-            console.log('[LiveKitVoice] Not connected');
-            return { success: true };
-        }
-
         try {
-            // Unpublish tracks
             if (this.localAudioTrack) {
-                this.localAudioTrack.stop();
-                await this.room.localParticipant.unpublishTrack(this.localAudioTrack);
+                try {
+                    this.localAudioTrack.stop();
+                } catch (e) {}
+                if (this.room) {
+                    try {
+                        await this.room.localParticipant.unpublishTrack(this.localAudioTrack);
+                    } catch (e) {}
+                }
                 this.localAudioTrack = null;
             }
 
-            // Remove agent audio element
             if (this.agentAudioElement) {
-                this.agentAudioElement.remove();
                 this.agentAudioElement = null;
             }
 
-            // Disconnect room
-            await this.room.disconnect();
-            this.room = null;
-            this.isConnected = false;
+            if (this.room) {
+                try {
+                    await this.room.disconnect();
+                } catch (e) {}
+                this.room = null;
+            }
 
-            console.log('[LiveKitVoice] Disconnected');
+            this.isConnected = false;
+            this.isConnecting = false;
             return { success: true };
         } catch (error) {
-            console.error('[LiveKitVoice] Disconnect error:', error);
+            console.error('[LiveKitVoiceService] Disconnection cleanup error:', error);
             return { success: false, error: error.message };
         }
     }
 
     /**
-     * Get connection status
+     * Starts voice feed.
      */
-    getStatus() {
+    async start(token, url) {
+        return this.connect(token, url);
+    }
+
+    /**
+     * Stops active audio feed.
+     */
+    async stop() {
+        return this.disconnect();
+    }
+
+    /**
+     * Reset service state completely.
+     */
+    async reset() {
+        try {
+            await this.disconnect();
+            this.room = null;
+            this.localAudioTrack = null;
+            this.isConnected = false;
+            this.isConnecting = false;
+            this.isMuted = false;
+            this.agentAudioElement = null;
+            this.lastHeartbeat = Date.now();
+            return { success: true };
+        } catch (error) {
+            console.error('[LiveKitVoiceService] Reset error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
+     * Returns a snapshot of the current service health and state.
+     */
+    getState() {
         return {
             connected: this.isConnected,
+            connecting: this.isConnecting,
             muted: this.isMuted,
             participants: this.room?.numParticipants || 0,
+            hasAudioContext: !!this.agentAudioElement,
+            healthStatus: this.isConnected && (Date.now() - this.lastHeartbeat > 45000) ? 'degraded' : 'healthy',
         };
+    }
+
+    /**
+     * Spawns active watchdog loop. If connected but no signal detected for over
+     * 60 seconds, trigger reconnect.
+     */
+    startWatchdog() {
+        if (this.watchdogTimer) return;
+
+        this.watchdogTimer = setInterval(async () => {
+            if (this.isConnected && (Date.now() - this.lastHeartbeat > 60000)) {
+                console.warn('[LiveKitVoiceService] Watchdog triggered - network stale. Resetting...');
+                this.lastHeartbeat = Date.now();
+                if (this.room) {
+                    await this.reset();
+                }
+            }
+        }, 15000);
+    }
+
+    stopWatchdog() {
+        if (this.watchdogTimer) {
+            clearInterval(this.watchdogTimer);
+            this.watchdogTimer = null;
+        }
     }
 }
 
-// Singleton instance
+// Singleton export
 export const livekitVoiceService = new LiveKitVoiceService();
 export default livekitVoiceService;

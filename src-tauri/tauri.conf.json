@@ -45,6 +45,9 @@
         "installMode": "both"
       }
     },
+    "macOS": {
+      "infoPlist": "Info.plist"
+    },
     "android": {
       "minSdkVersion": 24
     },

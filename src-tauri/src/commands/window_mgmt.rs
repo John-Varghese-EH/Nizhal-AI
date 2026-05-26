@@ -1,9 +1,42 @@
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
+use std::sync::Mutex;
+use std::collections::HashSet;
 
 // Desktop-only imports for multi-window support
 #[cfg(desktop)]
 use tauri::{WebviewUrl, WebviewWindowBuilder};
+
+pub struct WindowService {
+    active_windows: Mutex<HashSet<String>>,
+}
+
+#[allow(dead_code)]
+impl WindowService {
+    pub fn new() -> Self {
+        let mut active = HashSet::new();
+        active.insert("main".to_string());
+        Self {
+            active_windows: Mutex::new(active),
+        }
+    }
+
+    pub fn is_active(&self, label: &str) -> bool {
+        let active = self.active_windows.lock().unwrap();
+        active.contains(label)
+    }
+
+    pub fn register(&self, label: &str) {
+        let mut active = self.active_windows.lock().unwrap();
+        active.insert(label.to_string());
+    }
+
+    pub fn deregister(&self, label: &str) {
+        let mut active = self.active_windows.lock().unwrap();
+        active.remove(label);
+    }
+}
+
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct MonitorInfo {
@@ -170,15 +203,29 @@ pub async fn get_window_state(window: tauri::WebviewWindow) -> Result<WindowStat
 }
 
 #[tauri::command]
-pub async fn create_character_window(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn create_character_window(
+    app: tauri::AppHandle,
+    window_service: tauri::State<'_, WindowService>,
+) -> Result<(), String> {
     #[cfg(desktop)]
     {
-        // Check if window already exists
-        if app.get_webview_window("character").is_some() {
+        // Lock the active windows mutex to ensure atomic check-and-register
+        let mut active = window_service.active_windows.lock().unwrap();
+        
+        // Check if window already exists in registry or tauri manager
+        if active.contains("character") || app.get_webview_window("character").is_some() {
+            if let Some(window) = app.get_webview_window("character") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
             return Ok(());
         }
 
-        let _character_window = WebviewWindowBuilder::new(
+        // Mark as active inside the lock to block parallel invocations
+        active.insert("character".to_string());
+        std::mem::drop(active); // Explicitly release lock before building the window
+
+        let build_result = WebviewWindowBuilder::new(
             &app,
             "character",
             WebviewUrl::App("character.html".into()),
@@ -190,19 +237,28 @@ pub async fn create_character_window(app: tauri::AppHandle) -> Result<(), String
         .skip_taskbar(true)
         .maximized(true)
         .shadow(false)
-        .build()
-        .map_err(|e| e.to_string())?;
+        .build();
 
-        // Default to click-through for full screen overlay
-        let _ = _character_window.set_ignore_cursor_events(true);
+        match build_result {
+            Ok(character_window) => {
+                // Default to click-through for full screen overlay
+                let _ = character_window.set_ignore_cursor_events(true);
+                Ok(())
+            }
+            Err(e) => {
+                // If building failed, deregister so it can be retried
+                window_service.deregister("character");
+                Err(e.to_string())
+            }
+        }
     }
     #[cfg(not(desktop))]
     {
-        let _ = app;
+        let _ = (app, window_service);
         // On mobile, overlay is handled natively (Android OverlayService / iOS PiP)
         // This is a no-op — the frontend will use PlatformBridge to trigger native overlay
+        Ok(())
     }
-    Ok(())
 }
 
 #[tauri::command]
@@ -237,6 +293,7 @@ pub async fn set_character_position(
     x: i32,
     y: i32,
 ) -> Result<(), String> {
+    super::validation::validate_window_position(x, y)?;
     #[cfg(desktop)]
     {
         if let Some(window) = app.get_webview_window("character") {
@@ -256,6 +313,7 @@ pub async fn set_character_size(
     width: u32,
     height: u32,
 ) -> Result<(), String> {
+    super::validation::validate_window_dimensions(width, height)?;
     #[cfg(desktop)]
     {
         if let Some(window) = app.get_webview_window("character") {
@@ -375,6 +433,7 @@ pub async fn set_character_click_through(
 // ============================================================
 
 // Struct to store window rects for React Three Fiber collision
+#[cfg(windows)]
 #[derive(Serialize, Deserialize, Clone)]
 pub struct WindowRect {
     pub id: u32,
@@ -384,6 +443,7 @@ pub struct WindowRect {
     pub height: i32,
 }
 
+#[cfg(windows)]
 #[derive(Serialize, Deserialize, Clone)]
 pub struct WindowUpdatePayload {
     pub windows: Vec<WindowRect>,

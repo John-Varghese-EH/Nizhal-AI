@@ -18,6 +18,10 @@ export class AIService {
         this.memoryService = memoryService;
         this.provider = 'auto';
 
+        // Flawless Service Pattern states
+        this.status = 'uninitialized'; // 'uninitialized', 'initializing', 'ready', 'failed'
+        this.watchdogInterval = null;
+
         // Initialize plugins
         pluginManager.initialize().catch(console.error);
 
@@ -171,23 +175,144 @@ export class AIService {
         };
     }
 
-    async initialize() {
-        console.log('[AIService] Starting initialization...');
-
-        this.loadEnvironmentConfig();
-        await this.initializeProviders();
-
-        // Start health check interval
-        this.startHealthMonitoring();
-
-        // Initialize custom if configured
-        if (this.providerConfigs.custom.apiKey) {
-            console.log('[AIService] Custom provider configured');
+    /**
+     * Flawless Service Pattern: init()
+     * Async setup with try-catch. Handles partial failures gracefully.
+     */
+    async init() {
+        if (this.status === 'initializing' || this.status === 'ready') {
+            return true;
         }
 
-        console.log('[AIService] Initialization complete.');
-        console.log('[AIService] Current Provider:', this.provider);
-        console.log('[AIService] Available providers:', this.getAvailableProvidersList());
+        this.status = 'initializing';
+        try {
+            console.log('[AIService] Starting init()...');
+            this.loadEnvironmentConfig();
+            await this.initializeProviders();
+
+            // Start health check interval
+            this.startHealthMonitoring();
+
+            // Start watchdog monitor
+            this.startWatchdog();
+
+            if (this.providerConfigs.custom.apiKey) {
+                console.log('[AIService] Custom provider configured');
+            }
+
+            this.status = 'ready';
+            console.log('[AIService] Flawless initialization complete. Current Provider:', this.provider);
+            return true;
+        } catch (error) {
+            this.status = 'failed';
+            console.error('[AIService] Flawless initialization failed:', error);
+            // Handle partial failure gracefully: degrade to a local fallback
+            this.provider = 'ollama';
+            this.ollamaAvailable = false;
+            return false;
+        }
+    }
+
+    /**
+     * Backward-compatibility wrapper for initialize()
+     */
+    async initialize() {
+        return this.init();
+    }
+
+    /**
+     * Flawless Service Pattern: getState()
+     * Returns the current health of the service.
+     */
+    getState() {
+        return {
+            status: this.status,
+            currentProvider: this.provider,
+            availableProviders: this.getAvailableProvidersList(),
+            lastWorkingProvider: this.lastWorkingProvider,
+            ollamaAvailable: this.ollamaAvailable,
+            webllmAvailable: this.webllmAvailable,
+            health: { ...this.providerHealth },
+            queueSize: this.requestQueue.length
+        };
+    }
+
+    /**
+     * Flawless Service Pattern: reset()
+     * A hard-reset mechanism that restores the service to a known good state without a full app restart.
+     */
+    async reset() {
+        console.log('[AIService] Performing flawless reset...');
+        try {
+            this.stopWatchdog();
+
+            // Clear conversational contexts
+            this.conversationContext = [];
+            this.responseCache.clear();
+            this.requestQueue = [];
+
+            // Reset backoff states
+            for (const key of Object.keys(this.backoffState)) {
+                this.backoffState[key] = { consecutiveFailures: 0, nextAllowedTime: 0 };
+            }
+
+            // Reset health statuses
+            for (const key of Object.keys(this.providerHealth)) {
+                this.providerHealth[key] = { failures: 0, lastSuccess: null, lastError: null };
+            }
+
+            this.status = 'uninitialized';
+            const success = await this.init();
+            console.log('[AIService] Flawless reset successful. State:', this.status);
+            return success;
+        } catch (error) {
+            console.error('[AIService] Flawless reset failed:', error);
+            this.status = 'failed';
+            return false;
+        }
+    }
+
+    /**
+     * Start the watchdog monitor
+     */
+    startWatchdog() {
+        this.stopWatchdog();
+        this.watchdogInterval = setInterval(() => {
+            this.watchdog();
+        }, 15000);
+    }
+
+    /**
+     * Stop the watchdog monitor
+     */
+    stopWatchdog() {
+        if (this.watchdogInterval) {
+            clearInterval(this.watchdogInterval);
+            this.watchdogInterval = null;
+        }
+    }
+
+    /**
+     * Flawless Service Pattern: watchdog()
+     * An interval that periodically checks if the service is hung.
+     */
+    watchdog() {
+        // Check if queue processing is hung
+        if (this.isProcessingQueue && this.requestQueue.length > 0) {
+            console.warn('[AIService] Watchdog: Queue processing is active but request queue is stuck. Unsticking queue...');
+            this.isProcessingQueue = false;
+            this.processQueue();
+        }
+
+        // Check health of the currently active provider
+        const current = this.provider;
+        if (current && current !== 'auto' && current !== 'none') {
+            const health = this.providerHealth[current];
+            if (health && health.failures > 3) {
+                console.warn(`[AIService] Watchdog: Current provider ${current} is degraded (failures: ${health.failures}). Auto-recovering / switching...`);
+                this.selectBestProvider();
+            }
+        }
     }
 
     /**
@@ -725,7 +850,7 @@ export class AIService {
                     console.warn(`[AIService] Attempt ${attempt}/${this.maxRetries} failed:`, error.message);
 
                     if (attempt < this.maxRetries) {
-                        await this.sleep(this.retryDelay * attempt);
+                        await this.sleep(this.baseRetryDelay * attempt);
                     }
                 }
             }

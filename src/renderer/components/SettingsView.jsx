@@ -2,52 +2,306 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Attribution from './Attribution';
 import LegalDocumentViewer from './LegalDocumentViewer';
-import { Key, Eye, EyeOff, Lock, Plus, Trash2, Edit2, Save, X, RefreshCw } from 'lucide-react';
+import { 
+    Key, Eye, EyeOff, Lock, Plus, Trash2, Edit2, Save, X, RefreshCw,
+    Settings, Sliders, Volume2, User, KeyRound, Monitor, Terminal, 
+    HelpCircle, Check, AlertCircle, Loader2, Cpu, HardDrive, Shield 
+} from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
+import { SettingsService } from '../services/SettingsService';
 
-const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacyToggle, isModal = false, userProfile, onProfileChange }) => {
-    const toast = useToast(); // Hook usage
+const SettingsView = ({ 
+    onBack, 
+    onClose, 
+    onPersonaChange, 
+    privacyMode, 
+    onPrivacyToggle, 
+    isModal = false, 
+    userProfile, 
+    onProfileChange 
+}) => {
+    const toast = useToast();
+    
+    // Core settings states
     const [preferences, setPreferences] = useState({});
     const [personas, setPersonas] = useState([]);
     const [activePersonaId, setActivePersonaId] = useState('jarvis');
     const [isSaving, setIsSaving] = useState(false);
-    const [showApiKeyModal, setShowApiKeyModal] = useState(null);
-    const [apiKeyValue, setApiKeyValue] = useState('');
+    
+    // UI tabs/layout
+    const [activeSection, setActiveSection] = useState('general'); // 'general' | 'ai' | 'hardware' | 'system'
+    const [showLegalModal, setShowLegalModal] = useState(null);
+    
+    // AI Providers and Models
     const [aiProviders, setAiProviders] = useState([]);
     const [providerStatus, setProviderStatus] = useState(null);
-    const [activeTab, setActiveTab] = useState('general');
     const [availableModels, setAvailableModels] = useState([]);
-    const [availableMonitors, setAvailableMonitors] = useState([]);
-    const [showLegalModal, setShowLegalModal] = useState(null);
+    
+    // Local Candle model specific states
+    const [localModelProgress, setLocalModelProgress] = useState(null);
+    const [localModelLoading, setLocalModelLoading] = useState(false);
+    const [gpuInfo, setGpuInfo] = useState(null);
 
-    // Secrets Management State
-    const [secrets, setSecrets] = useState({});
-    const [visibleSecrets, setVisibleSecrets] = useState(new Set());
-    const [editingSecret, setEditingSecret] = useState(null); // { key, value }
-    const [newSecret, setNewSecret] = useState({ key: '', value: '' });
-
-    const [isAddingSecret, setIsAddingSecret] = useState(false);
+    // API Key inputs & validation states
+    const [apiKeys, setApiKeys] = useState({});
+    const [editingKeyProvider, setEditingKeyProvider] = useState(null);
+    const [tempKeyValue, setTempKeyValue] = useState('');
+    const [validationStatus, setValidationStatus] = useState({}); // { [provider]: 'idle' | 'validating' | 'success' | 'error' }
+    const [validationMessage, setValidationMessage] = useState({}); // { [provider]: string }
 
     // Custom Provider State
     const [customBaseUrl, setCustomBaseUrl] = useState('');
     const [customModelName, setCustomModelName] = useState('');
     const [customProviderName, setCustomProviderName] = useState('');
 
-    useEffect(() => {
-        if (activeTab === 'secrets') {
-            loadSecrets();
-        }
-    }, [activeTab]);
+    // Hardware State
+    const [availableMonitors, setAvailableMonitors] = useState([]);
 
-    const loadSecrets = async () => {
+    // Secrets Management State (.env list)
+    const [secrets, setSecrets] = useState({});
+    const [visibleSecrets, setVisibleSecrets] = useState(new Set());
+    const [editingSecret, setEditingSecret] = useState(null);
+    const [newSecret, setNewSecret] = useState({ key: '', value: '' });
+    const [isAddingSecret, setIsAddingSecret] = useState(false);
+
+    useEffect(() => {
+        loadSettings();
+        detectHardware();
+        
+        // Listen to Candle local model progress if any
+        let progressUnsubscribe;
+        if (window.nizhal?.on) {
+            progressUnsubscribe = window.nizhal.on('local-model-download-progress', (progress) => {
+                setLocalModelProgress(progress);
+                if (progress >= 1.0) {
+                    toast.success('Local AI model downloaded successfully!');
+                    setLocalModelProgress(null);
+                    // Refresh status
+                    refreshLocalModelStatus();
+                }
+            });
+        }
+
+        return () => {
+            if (progressUnsubscribe) progressUnsubscribe();
+        };
+    }, []);
+
+    const loadSettings = async () => {
         try {
+            const prefs = await window.nizhal?.memory.getUserPreferences();
+            const allPersonas = await window.nizhal?.persona.getAll();
+            const active = await window.nizhal?.persona.getActive();
+            const providers = await window.nizhal?.ai.getProviders();
+            const status = await window.nizhal?.ai.getProviderStatus();
+            const models = await window.nizhal?.ai.getModels();
+            const monitors = await window.nizhal?.windowControls?.getMonitors?.();
             const envVars = await window.nizhal?.env?.getAll();
+
+            setPreferences(prefs || {});
+            setPersonas(allPersonas || []);
+            setActivePersonaId(active?.id || 'jarvis');
+            setAiProviders(providers || []);
+            setProviderStatus(status || {});
+            setAvailableModels(models || []);
+            setAvailableMonitors(monitors || []);
             setSecrets(envVars || {});
+
+            // Load keys securely from Keyring
+            const loadedApiKeys = {};
+            const keyProviders = ['gemini', 'openai', 'anthropic', 'elevenlabs', 'groq', 'huggingface', 'together', 'custom'];
+            for (const kp of keyProviders) {
+                try {
+                    const key = await window.nizhal?.keyring?.getKey(kp);
+                    if (key) {
+                        loadedApiKeys[kp] = key;
+                    }
+                } catch (e) {
+                    console.error(`Failed to load key for ${kp} from keyring:`, e);
+                }
+            }
+            setApiKeys(loadedApiKeys);
+
+            // Restore Custom Provider State
+            if (prefs && prefs.customConfig) {
+                setCustomBaseUrl(prefs.customConfig.baseUrl || '');
+                setCustomModelName(prefs.customConfig.model || '');
+                setCustomProviderName(prefs.customConfig.name || 'Custom Provider');
+            }
         } catch (error) {
-            console.error('Failed to load secrets:', error);
+            console.error('Failed to load settings:', error);
         }
     };
 
+    const detectHardware = async () => {
+        try {
+            if (window.nizhal?.ai?.detectGpu) {
+                const info = await window.nizhal.ai.detectGpu();
+                setGpuInfo(info);
+            }
+        } catch (e) {
+            console.error('Failed to detect GPU:', e);
+        }
+    };
+
+    const handlePreferenceChange = async (key, value) => {
+        try {
+            const updated = { [key]: value };
+            const fullPrefs = await SettingsService.updatePreferences(updated);
+            setPreferences(fullPrefs);
+        } catch (error) {
+            toast.error(error.message || 'Failed to save preference');
+        }
+    };
+
+    const handlePersonaSwitch = async (personaId) => {
+        try {
+            const persona = await window.nizhal?.persona.setActive(personaId);
+            setActivePersonaId(personaId);
+            onPersonaChange?.(persona);
+            toast.success(`Persona switched to ${persona?.name || personaId}`);
+        } catch (error) {
+            console.error('Failed to switch persona:', error);
+            toast.error('Failed to switch persona');
+        }
+    };
+
+    const handleSaveApiKey = async (provider) => {
+        if (!tempKeyValue.trim()) {
+            toast.error('API Key cannot be empty');
+            return;
+        }
+
+        setValidationStatus(prev => ({ ...prev, [provider]: 'validating' }));
+        setValidationMessage(prev => ({ ...prev, [provider]: '' }));
+
+        try {
+            const customConfig = provider === 'custom' ? {
+                baseUrl: customBaseUrl.trim(),
+                model: customModelName.trim(),
+                name: customProviderName.trim() || 'Custom Provider'
+            } : null;
+
+            await SettingsService.saveSecureApiKey(provider, tempKeyValue.trim(), customConfig);
+            
+            setValidationStatus(prev => ({ ...prev, [provider]: 'success' }));
+            setApiKeys(prev => ({ ...prev, [provider]: tempKeyValue.trim() }));
+            
+            // Refresh provider info
+            const status = await window.nizhal?.ai.getProviderStatus();
+            const providers = await window.nizhal?.ai.getProviders();
+            const models = await window.nizhal?.ai.getModels();
+            setProviderStatus(status);
+            setAiProviders(providers);
+            setAvailableModels(models);
+
+            toast.success(`${provider.toUpperCase()} API Key validated and saved successfully!`);
+            setEditingKeyProvider(null);
+            setTempKeyValue('');
+        } catch (error) {
+            console.error(error);
+            setValidationStatus(prev => ({ ...prev, [provider]: 'error' }));
+            setValidationMessage(prev => ({ ...prev, [provider]: error.message || 'Validation failed. Check key & connection.' }));
+            toast.error(`Validation Failed: ${error.message || 'Invalid key'}`);
+        }
+    };
+
+    const handleDeleteApiKey = async (provider) => {
+        if (!confirm(`Are you sure you want to remove the API key for ${provider.toUpperCase()}?`)) return;
+        
+        try {
+            await SettingsService.deleteSecureApiKey(provider);
+            setApiKeys(prev => {
+                const next = { ...prev };
+                delete next[provider];
+                return next;
+            });
+            
+            // Update provider config
+            await window.nizhal?.ai.setProvider(provider, {});
+            const status = await window.nizhal?.ai.getProviderStatus();
+            const providers = await window.nizhal?.ai.getProviders();
+            setProviderStatus(status);
+            setAiProviders(providers);
+
+            toast.success(`Removed API Key for ${provider.toUpperCase()}`);
+        } catch (error) {
+            toast.error('Failed to remove API key');
+        }
+    };
+
+    const handleModelChange = async (providerId, modelId) => {
+        setIsSaving(true);
+        try {
+            await window.nizhal?.ai.setModel(providerId, modelId);
+            await handlePreferenceChange(`aiModel_${providerId}`, modelId);
+            const models = await window.nizhal?.ai.getModels();
+            setAvailableModels(models);
+            toast.success(`Active model updated to: ${modelId}`);
+        } catch (error) {
+            console.error('Failed to set model:', error);
+            toast.error('Failed to update model');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleProviderSelect = async (providerId) => {
+        setIsSaving(true);
+        try {
+            await window.nizhal?.ai.setProvider(providerId, {});
+            await handlePreferenceChange('aiProvider', providerId);
+            const status = await window.nizhal?.ai.getProviderStatus();
+            setProviderStatus(status);
+            toast.success(`Primary inference provider set to ${providerId}`);
+        } catch (error) {
+            console.error('Failed to set provider:', error);
+            toast.error('Failed to update provider');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const refreshLocalModelStatus = async () => {
+        try {
+            if (window.nizhal?.ai?.localModelStatus) {
+                const status = await window.nizhal.ai.localModelStatus();
+                // If we have some status representation
+                console.log("Local model status:", status);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const triggerLocalModelDownload = async () => {
+        try {
+            setLocalModelProgress(0.01);
+            await window.nizhal?.ai?.localModelDownload();
+            toast.success('Downloading Gemma Local AI Brain in background...');
+        } catch (e) {
+            console.error(e);
+            toast.error('Failed to start local model download');
+            setLocalModelProgress(null);
+        }
+    };
+
+    const triggerLocalModelLoad = async () => {
+        setLocalModelLoading(true);
+        try {
+            await window.nizhal?.ai?.localModelLoad();
+            toast.success('Local model successfully loaded into memory!');
+            const status = await window.nizhal?.ai.getProviderStatus();
+            setProviderStatus(status);
+        } catch (e) {
+            console.error(e);
+            toast.error(e.toString() || 'Failed to load local model');
+        } finally {
+            setLocalModelLoading(false);
+        }
+    };
+
+    // Secrets Management (.env) helpers
     const toggleSecretVisibility = (key) => {
         setVisibleSecrets(prev => {
             const next = new Set(prev);
@@ -67,16 +321,18 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
                 setEditingSecret(null);
                 setNewSecret({ key: '', value: '' });
                 setIsAddingSecret(false);
+                toast.success(`Saved secret: ${key}`);
             }
         } catch (error) {
             console.error('Failed to save secret:', error);
+            toast.error('Failed to save secret');
         } finally {
             setIsSaving(false);
         }
     };
 
     const handleDeleteSecret = async (key) => {
-        if (!confirm(`Are you sure you want to delete ${key}?`)) return;
+        if (!confirm(`Are you sure you want to delete ${key} from .env?`)) return;
         setIsSaving(true);
         try {
             const success = await window.nizhal?.env?.delete(key);
@@ -84,188 +340,23 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
                 const newSecrets = { ...secrets };
                 delete newSecrets[key];
                 setSecrets(newSecrets);
+                toast.success(`Deleted secret: ${key}`);
             }
         } catch (error) {
             console.error('Failed to delete secret:', error);
+            toast.error('Failed to delete secret');
         } finally {
             setIsSaving(false);
         }
     };
 
-
-
-    useEffect(() => {
-        loadSettings();
-    }, []);
-
-    // Load Life Data when tab is active
-
-
-    const loadSettings = async () => {
-        try {
-            const prefs = await window.nizhal?.memory.getUserPreferences();
-            const allPersonas = await window.nizhal?.persona.getAll();
-            const active = await window.nizhal?.persona.getActive();
-            const providers = await window.nizhal?.ai.getProviders();
-
-            const status = await window.nizhal?.ai.getProviderStatus();
-            const models = await window.nizhal?.ai.getModels();
-            const monitors = await window.nizhal?.windowControls?.getMonitors?.();
-
-            setPreferences(prefs || {});
-
-            // Restore Custom Provider State
-            if (prefs && prefs.customConfig) {
-                setCustomBaseUrl(prefs.customConfig.baseUrl || '');
-                setCustomModelName(prefs.customConfig.model || '');
-                setCustomProviderName(prefs.customConfig.name || '');
-            }
-
-            setPersonas(allPersonas || []);
-            setActivePersonaId(active?.id || 'jarvis');
-            setAiProviders(providers || []);
-            setProviderStatus(status || {});
-            setAvailableModels(models || []);
-            setAvailableMonitors(monitors || []);
-        } catch (error) {
-            console.error('Failed to load settings:', error);
-        }
-    };
-
-    const handleModelChange = async (providerId, modelId) => {
-        setIsSaving(true);
-        try {
-            await window.nizhal?.ai.setModel(providerId, modelId);
-            await handlePreferenceChange(`aiModel_${providerId}`, modelId);
-            const models = await window.nizhal?.ai.getModels();
-            setAvailableModels(models);
-        } catch (error) {
-            console.error('Failed to set model:', error);
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    const handlePreferenceChange = async (key, value) => {
-        setIsSaving(true);
-        try {
-            const updatedPrefs = { ...preferences, [key]: value };
-            await window.nizhal?.memory.setUserPreferences(updatedPrefs);
-            setPreferences(updatedPrefs);
-        } catch (error) {
-            console.error('Failed to save preference:', error);
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    const handlePersonaSwitch = async (personaId) => {
-        try {
-            const persona = await window.nizhal?.persona.setActive(personaId);
-            setActivePersonaId(personaId);
-            onPersonaChange?.(persona);
-        } catch (error) {
-            console.error('Failed to switch persona:', error);
-        }
-    };
-
-    const handleSaveApiKey = async () => {
-        if (!showApiKeyModal) return;
-
-        // Validation
-        if (showApiKeyModal === 'custom') {
-            if (!customBaseUrl.trim() || !apiKeyValue.trim()) {
-                alert('API Key and Base URL are required');
-                return;
-            }
-        } else {
-            if (!apiKeyValue.trim()) return;
-        }
-
-        setIsSaving(true);
-        try {
-            const updatedApiKeys = { ...preferences.apiKeys, [showApiKeyModal]: apiKeyValue.trim() };
-            // Save Keys
-            await window.nizhal?.memory.setUserPreferences({ apiKeys: updatedApiKeys });
-            setPreferences(prev => ({ ...prev, apiKeys: updatedApiKeys }));
-
-            // Save Custom Config specifics
-            if (showApiKeyModal === 'custom') {
-                const customConfig = {
-                    baseUrl: customBaseUrl.trim(),
-                    model: customModelName.trim(),
-                    name: customProviderName.trim() || 'Custom Provider'
-                };
-                await window.nizhal?.memory.setUserPreferences({ customConfig });
-
-                // Update provider immediately
-                await window.nizhal?.ai.setProvider('custom', {
-                    apiKey: apiKeyValue.trim(),
-                    baseUrl: customBaseUrl.trim(),
-                    model: customModelName.trim()
-                });
-            } else {
-                // Update standard provider
-                await window.nizhal?.ai.setProvider(showApiKeyModal, { apiKey: apiKeyValue.trim() });
-            }
-
-            // Refresh provider status
-            const status = await window.nizhal?.ai.getProviderStatus();
-            const providers = await window.nizhal?.ai.getProviders();
-            setProviderStatus(status);
-            setAiProviders(providers);
-
-            setShowApiKeyModal(null);
-            setApiKeyValue('');
-        } catch (error) {
-            console.error('Failed to save API key:', error);
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    const handleProviderSelect = async (providerId) => {
-        setIsSaving(true);
-        try {
-            await window.nizhal?.ai.setProvider(providerId, {});
-            await handlePreferenceChange('aiProvider', providerId);
-            const status = await window.nizhal?.ai.getProviderStatus();
-            setProviderStatus(status);
-        } catch (error) {
-            console.error('Failed to set provider:', error);
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    const handleFallbackToggle = async (enabled) => {
-        try {
-            await window.nizhal?.ai.setFallbackEnabled(enabled);
-            await handlePreferenceChange('enableFallback', enabled);
-            const status = await window.nizhal?.ai.getProviderStatus();
-            setProviderStatus(status);
-        } catch (error) {
-            console.error('Failed to toggle fallback:', error);
-        }
-    };
-
-    const checkLocalAI = async () => {
-        const available = await window.nizhal?.ai.checkLocalAI();
-        const status = await window.nizhal?.ai.getProviderStatus();
-        setProviderStatus(status);
-        return available;
-    };
-
-    const openExternal = (url) => {
-        window.nizhal?.app.openExternal(url);
-    };
-
+    // Helper components
     const SettingRow = ({ label, description, children }) => (
-        <div className="flex items-center justify-between py-3">
-            <div>
+        <div className="flex items-center justify-between py-4 border-b border-white/5 last:border-b-0">
+            <div className="pr-4">
                 <div className="text-sm font-medium text-white">{label}</div>
                 {description && (
-                    <div className="text-xs text-white/40 mt-0.5">{description}</div>
+                    <div className="text-xs text-white/40 mt-1 max-w-md leading-relaxed">{description}</div>
                 )}
             </div>
             <div className="flex-shrink-0">{children}</div>
@@ -276,8 +367,7 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
         <motion.button
             whileTap={{ scale: 0.95 }}
             onClick={() => onChange(!enabled)}
-            className={`relative w-12 h-6 rounded-full transition-colors ${enabled ? 'bg-indigo-600' : 'bg-white/20'
-                }`}
+            className={`relative w-12 h-6 rounded-full transition-colors ${enabled ? 'bg-indigo-600' : 'bg-white/10'}`}
         >
             <motion.div
                 className="absolute top-1 w-4 h-4 bg-white rounded-full"
@@ -287,350 +377,309 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
         </motion.button>
     );
 
-    const StatusIndicator = ({ available, configured }) => {
+    const StatusBadge = ({ available, configured }) => {
         if (available) {
-            return <span className="flex items-center gap-1.5 text-xs text-green-400"><span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" /> Connected</span>;
+            return <span className="flex items-center gap-1 text-xs text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full"><span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" /> Active</span>;
         }
         if (configured) {
-            return <span className="flex items-center gap-1.5 text-xs text-yellow-400"><span className="w-2 h-2 bg-yellow-400 rounded-full" /> Configured</span>;
+            return <span className="flex items-center gap-1 text-xs text-yellow-400 bg-yellow-500/10 px-2 py-0.5 rounded-full"><span className="w-1.5 h-1.5 bg-yellow-400 rounded-full" /> Configured</span>;
         }
-        return <span className="flex items-center gap-1.5 text-xs text-white/30"><span className="w-2 h-2 bg-white/30 rounded-full" /> Not set</span>;
+        return <span className="flex items-center gap-1 text-xs text-white/30 bg-white/5 px-2 py-0.5 rounded-full">Not Active</span>;
     };
 
-    const TabButton = ({ id, label, active }) => (
-        <motion.button
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setActiveTab(id)}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${active ? 'bg-indigo-600 text-white' : 'text-white/60 hover:text-white hover:bg-white/5'}`}
-        >
-            {label}
-        </motion.button>
-    );
+    const sidebarItems = [
+        { id: 'general', label: 'General', icon: Settings, desc: 'Themes, Character & Preferences' },
+        { id: 'ai', label: 'AI & Models', icon: Cpu, desc: 'Local Inference & API Keys' },
+        { id: 'hardware', label: 'Hardware', icon: Monitor, desc: 'Devices & Diagnostics' },
+        { id: 'system', label: 'System', icon: Terminal, desc: 'Logs, Cache & Secrets' },
+    ];
 
-    const apiKeyConfigs = [
-        { id: 'gemini', name: 'Google Gemini', description: 'Free tier available', url: 'https://aistudio.google.com/app/apikey' },
-        { id: 'openai', name: 'OpenAI', description: 'GPT-4o models', url: 'https://platform.openai.com/api-keys' },
-        { id: 'anthropic', name: 'Anthropic', description: 'Claude models', url: 'https://console.anthropic.com/settings/keys' },
-        { id: 'elevenlabs', name: 'ElevenLabs', description: 'Premium voice synthesis', url: 'https://elevenlabs.io/api' }
+    const providerConfigs = [
+        { id: 'gemini', name: 'Google Gemini', desc: 'Sleek & Fast - Free tier active', url: 'https://aistudio.google.com/app/apikey' },
+        { id: 'openai', name: 'OpenAI', desc: 'GPT-4o standard models', url: 'https://platform.openai.com/api-keys' },
+        { id: 'anthropic', name: 'Anthropic', desc: 'Claude models', url: 'https://console.anthropic.com/settings/keys' },
+        { id: 'groq', name: 'Groq Cloud', desc: 'Lightning fast open-source models', url: 'https://console.groq.com/keys' },
+        { id: 'together', name: 'Together AI', desc: 'Serverless model repository', url: 'https://api.together.xyz' },
+        { id: 'elevenlabs', name: 'ElevenLabs', desc: 'Hyper-realistic voice synthesis', url: 'https://elevenlabs.io' },
+        { id: 'custom', name: 'Custom LLM', desc: 'Connect to any OpenAI-compatible API', url: '#' },
     ];
 
     return (
-        <div className="h-full flex flex-col overflow-hidden">
-            <div className="p-4 border-b border-white/5 flex items-center justify-between">
+        <div className="h-full flex flex-col overflow-hidden bg-gray-950 text-white font-sans">
+            {/* Header */}
+            <div className="p-5 border-b border-white/5 flex items-center justify-between bg-gray-950/80 backdrop-blur-md sticky top-0 z-10">
                 <div>
-                    <h2 className="text-lg font-semibold gradient-text">Settings</h2>
-                    <p className="text-xs text-white/50 mt-1">Customize your Nizhal AI experience</p>
+                    <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-400 via-pink-400 to-amber-400 bg-clip-text text-transparent">
+                        Nizhal AI Settings
+                    </h2>
+                    <p className="text-xs text-white/40 mt-1">Configure your personal assistant, hardware & secure brains</p>
                 </div>
                 {isModal && onClose && (
                     <button
                         onClick={onClose}
-                        className="p-2 hover:bg-white/10 rounded-full transition-colors text-white/60 hover:text-white"
+                        className="p-2 hover:bg-white/10 rounded-xl transition-all text-white/60 hover:text-white"
                     >
-                        ✕
+                        <X size={20} />
                     </button>
                 )}
             </div>
 
-            {/* Tab Navigation */}
-            <div className="px-4 py-2 flex gap-2 border-b border-white/5 overflow-x-auto scrollbar-thin scrollbar-thumb-white/10">
-                <TabButton id="general" label="General" active={activeTab === 'general'} />
-                <TabButton id="character" label="Character" active={activeTab === 'character'} />
-                <TabButton id="ai" label="AI Providers" active={activeTab === 'ai'} />
-                <TabButton id="voice" label="Voice" active={activeTab === 'voice'} />
-                <TabButton id="secrets" label="Secrets" active={activeTab === 'secrets'} />
-                <TabButton id="shortcuts" label="Shortcuts" active={activeTab === 'shortcuts'} />
-                <TabButton id="about" label="About" active={activeTab === 'about'} />
-            </div>
+            {/* Main Content Area: Sidebar + Right Panel */}
+            <div className="flex-1 flex overflow-hidden">
+                {/* Sidebar */}
+                <div className="w-64 border-r border-white/5 bg-gray-950/50 flex flex-col p-4 space-y-2 overflow-y-auto">
+                    {sidebarItems.map((item) => {
+                        const Icon = item.icon;
+                        const isActive = activeSection === item.id;
+                        return (
+                            <motion.button
+                                key={item.id}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => setActiveSection(item.id)}
+                                className={`flex items-start gap-3 p-3 rounded-xl text-left transition-all ${
+                                    isActive 
+                                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/10' 
+                                        : 'text-white/60 hover:text-white hover:bg-white/5'
+                                }`}
+                            >
+                                <Icon size={18} className={`mt-0.5 flex-shrink-0 ${isActive ? 'text-white' : 'text-white/40'}`} />
+                                <div className="min-w-0">
+                                    <div className="text-sm font-semibold truncate">{item.label}</div>
+                                    <div className={`text-[10px] truncate ${isActive ? 'text-indigo-200' : 'text-white/30'}`}>
+                                        {item.desc}
+                                    </div>
+                                </div>
+                            </motion.button>
+                        );
+                    })}
 
-            <div className="flex-1 overflow-y-auto">
-                <div className="p-4 space-y-6">
-                    {/* Sponsor Button */}
-                    <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => openExternal('https://www.buymeacoffee.com/nizhalai')}
-                        className="w-full py-4 px-4 bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl flex items-center justify-center gap-3 text-white font-medium shadow-lg shadow-orange-500/25"
-                    >
-                        <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M20.216 6.415l-.132-.666c-.119-.598-.388-1.163-1.001-1.379-.197-.069-.42-.098-.57-.241-.152-.143-.196-.366-.231-.572-.065-.378-.125-.756-.192-1.133-.057-.325-.102-.69-.25-.987-.195-.4-.597-.634-.996-.788a5.723 5.723 0 00-.626-.194c-1-.263-2.05-.36-3.077-.416a25.834 25.834 0 00-3.7.062c-.915.083-1.88.184-2.75.5-.318.116-.646.256-.888.501-.297.302-.393.77-.177 1.146.154.267.415.456.692.58.36.162.737.284 1.123.366 1.075.238 2.189.331 3.287.37 1.218.05 2.437.01 3.65-.118.299-.033.598-.073.896-.119.352-.054.578-.513.474-.834-.124-.383-.457-.531-.834-.473-.466.074-.96.108-1.382.146-1.177.08-2.358.082-3.536.006a22.228 22.228 0 01-1.157-.107c-.086-.01-.18-.025-.258-.036-.243-.036-.484-.08-.724-.13-.111-.027-.111-.185 0-.212h.005c.277-.06.557-.108.838-.147h.002c.131-.009.263-.032.394-.048a25.076 25.076 0 013.426-.12c.674.019 1.347.067 2.017.144l.228.031c.267.04.533.088.798.145.392.085.895.113 1.07.542.055.137.08.288.111.431l.319 1.484a.237.237 0 01-.199.284h-.003c-.037.006-.075.01-.112.015a36.704 36.704 0 01-4.743.295 37.059 37.059 0 01-4.699-.304c-.14-.017-.293-.042-.417-.06-.326-.048-.649-.108-.973-.161-.393-.065-.768-.032-1.123.161-.29.16-.527.404-.675.701-.154.316-.199.66-.267 1-.069.34-.176.707-.135 1.056.087.753.613 1.365 1.37 1.502a39.69 39.69 0 0011.343.376.483.483 0 01.535.53l-.071.697-1.018 9.907c-.041.41-.047.832-.125 1.237-.122.637-.553 1.028-1.182 1.171-.577.131-1.165.185-1.756.205-.656.023-1.313-.019-1.969-.062-.661-.043-1.32-.104-1.979-.176-.289-.032-.554-.146-.7-.427-.148-.283-.148-.621-.085-.926.111-.533.32-1.017.596-1.468a21.265 21.265 0 011.783-2.456c.299-.355.614-.697.922-1.045.079-.09.154-.185.232-.276.208-.243.189-.589-.074-.773-.25-.175-.582-.137-.822.101-.336.334-.666.673-.988 1.021a23.234 23.234 0 00-2.189 2.851c-.431.66-.781 1.374-.975 2.148-.104.413-.143.846-.07 1.265.074.423.261.807.536 1.113.493.55 1.2.786 1.923.88.749.097 1.507.117 2.261.106.774-.012 1.549-.068 2.319-.16.696-.083 1.39-.206 2.03-.486.574-.252 1.112-.671 1.359-1.273.148-.358.215-.747.268-1.13l.052-.426c.015-.116.029-.232.041-.347l.902-8.765c.028-.266.058-.532.088-.797l.035-.318.024-.2.025-.236.034-.315.018-.162.009-.083c.005-.044.011-.088.016-.131.053-.441-.291-.844-.753-.918a43.422 43.422 0 01-2.693-.448 38.69 38.69 0 01-2.443-.55c-.212-.057-.424-.116-.636-.177-.146-.042-.293-.084-.439-.127-.072-.021-.143-.043-.213-.064-.034-.011-.067-.021-.1-.031h-.003l-.265-.082-.13-.041-.014-.004h-.002l-.016-.005-.028-.009-.064-.02a.486.486 0 01-.332-.597l.008-.027.016-.051.014-.046.01-.034c.112-.378.226-.757.35-1.132.132-.398.274-.793.433-1.18.083-.204.172-.405.266-.603a.514.514 0 01.456-.279h.005l.009.001.027.002.064.007.13.013.279.03c.147.016.294.031.442.046l.451.044c.149.014.298.028.448.041l.444.04c.147.012.294.024.442.035l.435.032.43.03.426.028.42.026.414.024.408.022.4.02.392.018.384.016.375.013.366.011.357.01h.346l.337.005h.656l.316-.003.306-.006z" />
-                        </svg>
-                        Sponsor Nizhal AI ☕
-                    </motion.button>
+                    <div className="flex-1" />
+                    
+                    {/* Attribution */}
+                    <div className="pt-4 border-t border-white/5 text-[10px] text-white/20">
+                        <Attribution variant="simple" />
+                        <div className="flex gap-2 mt-2">
+                            <button onClick={() => setShowLegalModal('privacy')} className="hover:text-white/40">Privacy Policy</button>
+                            <span>•</span>
+                            <button onClick={() => setShowLegalModal('terms')} className="hover:text-white/40">Terms</button>
+                        </div>
+                    </div>
+                </div>
 
+                {/* Right Panel (Content) */}
+                <div className="flex-1 overflow-y-auto bg-gray-950/20 p-6 scrollbar-thin">
                     <AnimatePresence mode="wait">
-                        {activeTab === 'general' && (
+                        {activeSection === 'general' && (
                             <motion.div
                                 key="general"
-                                initial={{ opacity: 0, x: -20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: 20 }}
-                                className="space-y-6"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                className="space-y-6 max-w-3xl"
                             >
-                                {/* Persona Selection */}
-                                <div className="space-y-1">
-                                    <h3 className="text-sm font-medium text-white/70 mb-3">Active Persona</h3>
-                                    <div className="grid grid-cols-3 gap-2">
+                                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/5">
+                                    <Settings className="text-indigo-400" size={18} />
+                                    <h3 className="text-base font-bold">General Settings</h3>
+                                </div>
+
+                                {/* Active Persona Section */}
+                                <div className="space-y-3">
+                                    <label className="text-xs font-semibold text-white/50 tracking-wider uppercase block">Active AI Persona</label>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                         {personas.map((persona) => (
                                             <motion.button
                                                 key={persona.id}
-                                                whileTap={{ scale: 0.95 }}
+                                                whileHover={{ scale: 1.01 }}
+                                                whileTap={{ scale: 0.98 }}
                                                 onClick={() => handlePersonaSwitch(persona.id)}
-                                                className={`p-3 rounded-xl text-center transition-all ${activePersonaId === persona.id
-                                                    ? 'bg-indigo-600 text-white'
-                                                    : 'bg-white/5 text-white/60 hover:bg-white/10'
-                                                    }`}
+                                                className={`p-3 rounded-xl text-left flex items-center gap-3 transition-all ${
+                                                    activePersonaId === persona.id
+                                                        ? 'bg-indigo-600 border-2 border-indigo-400/50 shadow-md shadow-indigo-600/20'
+                                                        : 'bg-white/5 border border-white/5 text-white/60 hover:bg-white/10'
+                                                }`}
                                             >
-                                                <div className="text-2xl mb-1">
-                                                    {(() => {
-                                                        const icons = {
-                                                            jarvis: '🤖',
-                                                            kavya: '✨',
-                                                            arjun: '🛡️',
-                                                            naruto: '🦊',
-                                                            goku: '🐉',
-                                                            elsa: '❄️',
-                                                            tamil_nanban: '🎭',
-                                                            telugu_sneham: '🤝',
-                                                            hindi_dost: '🕺'
-                                                        };
-                                                        return icons[persona.id] || '👤';
-                                                    })()}
+                                                <span className="text-xl">
+                                                    {persona.id === 'jarvis' && '🤖'}
+                                                    {persona.id === 'kavya' && '✨'}
+                                                    {persona.id === 'arjun' && '🛡️'}
+                                                    {persona.id === 'naruto' && '🦊'}
+                                                    {persona.id === 'goku' && '🐉'}
+                                                    {persona.id === 'elsa' && '❄️'}
+                                                    {persona.id === 'tamil_nanban' && '🎭'}
+                                                    {persona.id === 'telugu_sneham' && '🤝'}
+                                                    {persona.id === 'hindi_dost' && '🕺'}
+                                                    {['jarvis','kavya','arjun','naruto','goku','elsa','tamil_nanban','telugu_sneham','hindi_dost'].indexOf(persona.id) === -1 && '👤'}
+                                                </span>
+                                                <div className="min-w-0">
+                                                    <div className="text-xs font-bold truncate text-white">{persona.name}</div>
+                                                    <div className="text-[10px] opacity-60 truncate">Language: {persona.language || 'en'}</div>
                                                 </div>
-                                                <div className="text-xs font-medium truncate">{persona.name}</div>
                                             </motion.button>
                                         ))}
                                     </div>
                                 </div>
 
-                                {/* General Settings */}
-                                <div className="space-y-1 border-t border-white/5 pt-4">
-                                    <h3 className="text-sm font-medium text-white/70 mb-3">General</h3>
+                                {/* Character Model Selection */}
+                                <div className="space-y-3 pt-4 border-t border-white/5">
+                                    <label className="text-xs font-semibold text-white/50 tracking-wider uppercase block">Character Hologram Avatar</label>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
+                                        {[
+                                            { id: 'jarvis', name: 'Jarvis Default', icon: '🔮', desc: 'Core Hologram' },
+                                            { id: 'aldina', name: 'Aldina', icon: '🌸', desc: 'VRM Anime' },
+                                            { id: 'zome', name: 'Zome', icon: '👧', desc: 'VRM Model' },
+                                            { id: 'lazuli', name: 'Lazuli', icon: '💫', desc: 'VRM Model' },
+                                            { id: 'miku', name: 'Hatsune Miku', icon: '🎤', desc: 'VRM Vocaloid' },
+                                            { id: 'nahida', name: 'Nahida', icon: '🌿', desc: 'VRM Model' },
+                                            { id: 'alicia', name: 'Alicia Solid', icon: '🦊', desc: 'VRM Anime' },
+                                            { id: 'pranama', name: 'Pranama', icon: '🙏', desc: 'Indian VRM' },
+                                            { id: 'riku', name: 'Riku Glasses', icon: '👓', desc: 'Male VRM' },
+                                            { id: 'sheeba', name: 'Sheeba', icon: '👩', desc: 'VRM model' },
+                                            { id: 'meera', name: 'Meera', icon: '👩‍🦰', desc: 'VRM Model' },
+                                            { id: 'devika', name: 'Devika', icon: '👸', desc: 'Indian VRM' },
+                                            { id: 'linda', name: 'Linda Business', icon: '👱‍♀️', desc: 'Formal VRM' },
+                                            { id: 'lakshmi', name: 'Lakshmi', icon: '🕉️', desc: 'Trad VRM' },
+                                            { id: 'ananya', name: 'Ananya', icon: '💃', desc: 'Casual VRM' }
+                                        ].map((char) => (
+                                            <motion.button
+                                                key={char.id}
+                                                whileTap={{ scale: 0.98 }}
+                                                onClick={async () => {
+                                                    await window.nizhal?.character?.setModel?.(char.id);
+                                                    handlePreferenceChange('characterModel', char.id);
+                                                }}
+                                                className={`p-2.5 rounded-xl text-left flex items-center gap-2.5 transition-all ${
+                                                    preferences.characterModel === char.id
+                                                        ? 'bg-indigo-600/20 border-2 border-indigo-500'
+                                                        : 'bg-white/5 border border-white/5 hover:bg-white/10'
+                                                }`}
+                                            >
+                                                <span className="text-xl">{char.icon}</span>
+                                                <div className="min-w-0">
+                                                    <div className="text-xs font-bold text-white truncate">{char.name}</div>
+                                                    <div className="text-[10px] text-white/40 truncate">{char.desc}</div>
+                                                </div>
+                                            </motion.button>
+                                        ))}
+                                    </div>
+                                </div>
 
-                                    <SettingRow label="Voice Output" description="Enable AI speech responses">
-                                        <Toggle
-                                            enabled={preferences.voiceEnabled}
-                                            onChange={(value) => handlePreferenceChange('voiceEnabled', value)}
+                                {/* Custom Toggles and Ranges */}
+                                <div className="space-y-2 pt-4 border-t border-white/5">
+                                    <h4 className="text-xs font-semibold text-white/50 tracking-wider uppercase mb-2">Display & Basic Controls</h4>
+                                    
+                                    <SettingRow label="Theme Mode" description="Choose interface color scheme">
+                                        <div className="flex bg-white/5 rounded-lg p-0.5 border border-white/5">
+                                            {['light', 'dark', 'auto'].map((t) => (
+                                                <button
+                                                    key={t}
+                                                    onClick={() => handlePreferenceChange('theme', t)}
+                                                    className={`px-3 py-1 rounded-md text-xs capitalize transition-all ${
+                                                        preferences.theme === t 
+                                                            ? 'bg-indigo-600 text-white' 
+                                                            : 'text-white/50 hover:text-white'
+                                                    }`}
+                                                >
+                                                    {t}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </SettingRow>
+
+                                    <SettingRow label="Voice Output (Speak)" description="AI speaks responses aloud using system synthesizer">
+                                        <Toggle 
+                                            enabled={preferences.voiceEnabled} 
+                                            onChange={(val) => handlePreferenceChange('voiceEnabled', val)} 
                                         />
                                     </SettingRow>
 
-                                    <SettingRow label="Object Detection" description="Detect objects in camera feed with bounding boxes">
-                                        <Toggle
-                                            enabled={preferences.objectDetectionEnabled}
-                                            onChange={(value) => handlePreferenceChange('objectDetectionEnabled', value)}
+                                    <SettingRow label="Camera Object Detection" description="Enable neural real-time visual recognition in camera feed">
+                                        <Toggle 
+                                            enabled={preferences.objectDetectionEnabled} 
+                                            onChange={(val) => handlePreferenceChange('objectDetectionEnabled', val)} 
                                         />
                                     </SettingRow>
 
-                                    <div className="py-3">
+                                    <SettingRow label="Startup Launch" description="Automatically launch Nizhal AI on system startup">
+                                        <Toggle 
+                                            enabled={preferences.startWithWindows} 
+                                            onChange={(val) => handlePreferenceChange('startWithWindows', val)} 
+                                        />
+                                    </SettingRow>
+
+                                    <SettingRow label="Always on Top" description="Keep character hologram layered above other system windows">
+                                        <Toggle 
+                                            enabled={preferences.alwaysOnTop} 
+                                            onChange={(val) => {
+                                                handlePreferenceChange('alwaysOnTop', val);
+                                                window.nizhal?.window.setAlwaysOnTop(val);
+                                            }} 
+                                        />
+                                    </SettingRow>
+
+                                    {/* Weather Settings */}
+                                    <div className="py-4 border-b border-white/5">
                                         <div className="flex justify-between items-center mb-2">
                                             <div>
                                                 <div className="text-sm font-medium text-white">Weather Location</div>
-                                                <div className="text-xs text-white/40">Set city for local forecasts</div>
+                                                <div className="text-xs text-white/40 mt-1">Define city for voice and widget forecasts</div>
                                             </div>
-                                            <div className="text-xs text-cyan-400 font-mono">
+                                            <span className="text-xs text-indigo-400 font-bold bg-indigo-500/10 px-2 py-0.5 rounded-full">
                                                 {preferences.weatherLocation?.name || 'Kochi, IN'}
-                                            </div>
+                                            </span>
                                         </div>
                                         <div className="flex gap-2">
                                             <input
                                                 type="text"
-                                                placeholder="Enter city name..."
-                                                className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-indigo-500/50 outline-none"
+                                                placeholder="Search city (e.g. Cochin, Chennai, New York)..."
+                                                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-indigo-500/50 outline-none"
                                                 onKeyDown={async (e) => {
                                                     if (e.key === 'Enter') {
                                                         const city = e.target.value;
                                                         if (!city) return;
-
-                                                        // Import dynamically or assume weatherService is available globally/imported
-                                                        // Since we can't easily import here without top-level changes, we'll use a hack or assume the service is exposed
-                                                        // Better: We'll fetch directly here or add a helper
                                                         try {
                                                             const { weatherService } = await import('../../assistant/life-manager/Weather');
-                                                            const location = await weatherService.resolveLocation(city);
-                                                            if (location) {
-                                                                handlePreferenceChange('weatherLocation', location);
-                                                                e.target.value = ''; // Clear input on success
+                                                            const loc = await weatherService.resolveLocation(city);
+                                                            if (loc) {
+                                                                handlePreferenceChange('weatherLocation', loc);
+                                                                e.target.value = '';
+                                                                toast.success(`Weather location set to ${loc.name}`);
                                                             } else {
-                                                                alert('City not found!');
+                                                                toast.error('City not found');
                                                             }
                                                         } catch (err) {
-                                                            console.error('Failed to resolve location', err);
+                                                            console.error(err);
+                                                            toast.error('Failed to resolve weather location');
                                                         }
                                                     }
                                                 }}
                                             />
-                                            <button className="px-3 py-2 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 rounded-lg text-sm">
-                                                Set
-                                            </button>
                                         </div>
                                     </div>
 
-                                    <SettingRow label="Temperature Unit" description="Celsius or Fahrenheit">
-                                        <div className="flex bg-white/10 rounded-lg p-1">
-                                            <button
-                                                onClick={() => handlePreferenceChange('tempUnit', 'C')}
-                                                className={`px-3 py-1 rounded-md text-xs transition-colors ${!preferences.tempUnit || preferences.tempUnit === 'C' ? 'bg-indigo-600 text-white' : 'text-white/50 hover:text-white'}`}
-                                            >
-                                                °C
-                                            </button>
-                                            <button
-                                                onClick={() => handlePreferenceChange('tempUnit', 'F')}
-                                                className={`px-3 py-1 rounded-md text-xs transition-colors ${preferences.tempUnit === 'F' ? 'bg-indigo-600 text-white' : 'text-white/50 hover:text-white'}`}
-                                            >
-                                                °F
-                                            </button>
-                                        </div>
-                                    </SettingRow>
-
-                                    <SettingRow label="Always on Top" description="Keep window above others">
-                                        <Toggle
-                                            enabled={preferences.alwaysOnTop}
-                                            onChange={(value) => {
-                                                handlePreferenceChange('alwaysOnTop', value);
-                                                window.nizhal?.window.setAlwaysOnTop(value);
-                                            }}
-                                        />
-                                    </SettingRow>
-
-                                    <SettingRow label="Start with Windows" description="Launch on system startup">
-                                        <Toggle
-                                            enabled={preferences.startWithWindows}
-                                            onChange={(value) => handlePreferenceChange('startWithWindows', value)}
-                                        />
-                                    </SettingRow>
-
-                                    <SettingRow
-                                        label="Privacy Mode"
-                                        description="Local-only AI (blocks cloud connections)"
-                                    >
-                                        <Toggle
-                                            enabled={privacyMode}
-                                            onChange={onPrivacyToggle}
-                                        />
-                                    </SettingRow>
-                                </div>
-
-                                <div className="pt-4 border-t border-white/5">
-                                    <h3 className="text-sm font-medium text-white/70 mb-3">Setup & Reset</h3>
-                                    <motion.button
-                                        whileTap={{ scale: 0.95 }}
-                                        onClick={async () => {
-                                            await handlePreferenceChange('onboardingComplete', false);
-                                            window.location.reload(); // Reload to trigger App.jsx check
-                                        }}
-                                        className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-medium text-indigo-300"
-                                    >
-                                        Restart Onboarding Wizard
-                                    </motion.button>
-                                </div>
-
-
-                                {/* Support Links */}
-                                <div className="border-t border-white/5 pt-4 space-y-3">
-                                    <h3 className="text-sm font-medium text-white/70">Support & Links</h3>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <motion.button
-                                            whileHover={{ scale: 1.02 }}
-                                            whileTap={{ scale: 0.98 }}
-                                            onClick={() => openExternal('https://patreon.com/nizhalai')}
-                                            className="p-3 bg-orange-500/10 border border-orange-500/20 rounded-xl text-orange-400 text-sm font-medium"
-                                        >
-                                            Patreon
-                                        </motion.button>
-                                        <motion.button
-                                            whileHover={{ scale: 1.02 }}
-                                            whileTap={{ scale: 0.98 }}
-                                            onClick={() => openExternal('https://github.com/nizhal-ai')}
-                                            className="p-3 bg-white/5 border border-white/10 rounded-xl text-white/70 text-sm font-medium"
-                                        >
-                                            GitHub
-                                        </motion.button>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        )}
-
-                        {activeTab === 'character' && (
-                            <motion.div
-                                key="character"
-                                initial={{ opacity: 0, x: -20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: 20 }}
-                                className="space-y-6"
-                            >
-                                {/* Character Model Selection */}
-                                <div className="space-y-3">
-                                    <h3 className="text-sm font-medium text-white/70">Character Model</h3>
-                                    <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
-                                        {[
-                                            { id: 'jarvis', name: 'Jarvis', icon: '🔮', desc: 'Hologram' },
-                                            { id: 'aldina', name: 'Aldina', icon: '🌸', desc: 'VRM' },
-                                            { id: 'zome', name: 'Zome', icon: '👧', desc: 'VRM' },
-                                            { id: 'lazuli', name: 'Lazuli', icon: '💫', desc: 'VRM' },
-                                            { id: 'miku', name: 'Hatsune Miku', icon: '🎤', desc: 'VRM' },
-                                            { id: 'nahida', name: 'Nahida', icon: '🌿', desc: 'VRM' },
-                                            { id: 'alicia', name: 'Alicia', icon: '🦊', desc: 'VRM' },
-                                            { id: 'pranama', name: 'Pranama', icon: '🙏', desc: 'VRM' },
-                                            { id: 'riku', name: 'Riku', icon: '👓', desc: 'VRM' },
-                                            { id: 'sheeba', name: 'Sheeba', icon: '👩', desc: 'VRM' },
-                                            { id: 'meera', name: 'Meera', icon: '👩‍🦰', desc: 'VRM' },
-                                            { id: 'devika', name: 'Devika', icon: '👸', desc: 'VRM' },
-                                            { id: 'linda', name: 'Linda', icon: '👱‍♀️', desc: 'VRM' },
-                                            { id: 'lakshmi', name: 'Lakshmi', icon: '🕉️', desc: 'VRM' },
-                                            { id: 'ananya', name: 'Ananya', icon: '💃', desc: 'VRM' }
-                                        ].map((char) => (
-                                            <motion.button
-                                                key={char.id}
-                                                whileTap={{ scale: 0.95 }}
-                                                onClick={async () => {
-                                                    // use await to ensure it completes
-                                                    await window.nizhal?.character?.setModel?.(char.id);
-                                                    handlePreferenceChange('characterModel', char.id);
-                                                }}
-                                                className={`p-3 rounded-xl text-left transition-all ${preferences.characterModel === char.id
-                                                    ? 'bg-indigo-600/30 border-2 border-indigo-500'
-                                                    : 'bg-white/5 border border-white/10 hover:bg-white/10'
-                                                    }`}
-                                            >
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-2xl">{char.icon}</span>
-                                                    <div>
-                                                        <div className="text-sm font-medium text-white">{char.name}</div>
-                                                        <div className="text-xs text-white/40">{char.desc}</div>
-                                                    </div>
-                                                </div>
-                                            </motion.button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Display Settings */}
-                                <div className="space-y-3 border-t border-white/5 pt-4">
-                                    <h3 className="text-sm font-medium text-white/70">Display & Interaction (Unified)</h3>
-
-                                    <div>
-                                        <div className="flex justify-between text-sm mb-1">
-                                            <span className="text-white/60">Transparency</span>
+                                    {/* Opacity and Scale ranges */}
+                                    <div className="py-4 border-b border-white/5">
+                                        <div className="flex justify-between text-xs font-medium text-white mb-2">
+                                            <span>Character Opacity</span>
                                             <span className="text-white/40">{Math.round((preferences.characterOpacity || 0.8) * 100)}%</span>
                                         </div>
                                         <input
                                             type="range"
                                             min="0.1"
-                                            max="1"
+                                            max="1.0"
                                             step="0.05"
                                             value={preferences.characterOpacity || 0.8}
                                             onChange={async (e) => {
                                                 const val = parseFloat(e.target.value);
                                                 handlePreferenceChange('characterOpacity', val);
-                                                // Sync with unified state for immediate effect
                                                 await window.nizhal?.state?.set?.('ui.transparency', val);
                                             }}
-                                            className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                                            className="w-full accent-indigo-500 bg-white/10 h-1.5 rounded-lg appearance-none cursor-pointer"
                                         />
                                     </div>
 
-                                    <div>
-                                        <div className="flex justify-between text-sm mb-1">
-                                            <span className="text-white/60">Character Scale</span>
+                                    <div className="py-4 border-b border-white/5">
+                                        <div className="flex justify-between text-xs font-medium text-white mb-2">
+                                            <span>Character Rendering Scale</span>
                                             <span className="text-white/40">{Math.round((preferences.characterScale || 1.0) * 100)}%</span>
                                         </div>
                                         <input
@@ -642,15 +691,342 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
                                             onChange={async (e) => {
                                                 const val = parseFloat(e.target.value);
                                                 handlePreferenceChange('characterScale', val);
-                                                // Sync with unified state for immediate effect
                                                 await window.nizhal?.state?.set?.('ui.characterScale', val);
                                             }}
-                                            className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                                            className="w-full accent-indigo-500 bg-white/10 h-1.5 rounded-lg appearance-none cursor-pointer"
                                         />
                                     </div>
 
+                                    {/* Snapping position presets */}
+                                    <div className="py-4">
+                                        <div className="text-sm font-medium text-white mb-2">Snap Placement Presets</div>
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {[
+                                                { id: 'top-left', label: 'Top Left', icon: '↖️' },
+                                                { id: 'top-right', label: 'Top Right', icon: '↗️' },
+                                                { id: 'bottom-left', label: 'Bottom Left', icon: '↙️' },
+                                                { id: 'bottom-right', label: 'Bottom Right', icon: '↘️' }
+                                            ].map((pos) => (
+                                                <button
+                                                    key={pos.id}
+                                                    onClick={() => {
+                                                        window.nizhal?.character?.snap?.(pos.id);
+                                                        toast.success(`Character snapped to: ${pos.label}`);
+                                                    }}
+                                                    className="py-2.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-center text-sm font-semibold transition-all flex flex-col items-center gap-1"
+                                                >
+                                                    <span>{pos.icon}</span>
+                                                    <span className="text-[10px] text-white/50">{pos.label}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+
+                        {activeSection === 'ai' && (
+                            <motion.div
+                                key="ai"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                className="space-y-6 max-w-3xl"
+                            >
+                                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/5">
+                                    <Cpu className="text-indigo-400" size={18} />
+                                    <h3 className="text-base font-bold">AI Brains & Model Routing</h3>
+                                </div>
+
+                                {/* Active Inference State Banner */}
+                                <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 flex flex-col gap-2">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-sm font-bold text-white flex items-center gap-2">
+                                            <Shield size={16} className="text-indigo-400" /> Current Inference Active
+                                        </span>
+                                        <span className="text-xs bg-indigo-500/30 border border-indigo-400/30 text-indigo-300 font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                                            {providerStatus?.currentProvider || 'None'}
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-white/50 leading-relaxed">
+                                        Tasks will route either through low-latency local model running directly on your CPU/GPU hardware, or safely failover to super-intelligent cloud endpoints based on complexity.
+                                    </p>
+                                </div>
+
+                                {/* EMBEDDED LOCAL INFERENCE (CANDLE INTEGRATION) */}
+                                <div className="space-y-4 p-5 rounded-2xl bg-white/5 border border-white/10">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                                                <Cpu className="text-indigo-400" size={20} />
+                                            </div>
+                                            <div>
+                                                <h4 className="text-sm font-bold text-white">Candle Local Inference Engine</h4>
+                                                <p className="text-xs text-white/40 mt-0.5">Self-Contained zero-setup offline Gemma 4B Brain</p>
+                                            </div>
+                                        </div>
+                                        {gpuInfo && (
+                                            <span className="text-xs font-semibold px-2.5 py-1 bg-green-500/10 text-green-400 rounded-full border border-green-500/20 flex items-center gap-1">
+                                                <Check size={12} /> {gpuInfo.backend || 'CPU Acceleration'}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {/* Download / Progress section */}
+                                    <div className="pt-2">
+                                        {localModelProgress !== null ? (
+                                            <div className="space-y-2">
+                                                <div className="flex justify-between text-xs text-indigo-300">
+                                                    <span>Initializing AI brain in background...</span>
+                                                    <span className="font-mono">{Math.round(localModelProgress * 100)}%</span>
+                                                </div>
+                                                <div className="w-full bg-white/10 h-2 rounded-full overflow-hidden">
+                                                    <div 
+                                                        className="bg-indigo-500 h-full rounded-full transition-all duration-300"
+                                                        style={{ width: `${localModelProgress * 100}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={triggerLocalModelDownload}
+                                                    className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/15 flex items-center justify-center gap-2"
+                                                >
+                                                    <RefreshCw size={14} /> Download Gemma 4B Model (Silent)
+                                                </button>
+                                                <button
+                                                    disabled={localModelLoading}
+                                                    onClick={triggerLocalModelLoad}
+                                                    className="py-2.5 px-4 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-xl text-xs font-bold transition-all disabled:opacity-40 flex items-center gap-1.5"
+                                                >
+                                                    {localModelLoading ? (
+                                                        <>
+                                                            <Loader2 className="animate-spin" size={14} /> Loading...
+                                                        </>
+                                                    ) : (
+                                                        'Load Model'
+                                                    )}
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* CLOUD PROVIDERS & KEYRING MANAGEMENT */}
+                                <div className="space-y-3">
+                                    <label className="text-xs font-semibold text-white/50 tracking-wider uppercase block">Cloud Models & Keyring Vault</label>
+                                    
+                                    <div className="space-y-3">
+                                        {providerConfigs.map((config) => {
+                                            const isEditing = editingKeyProvider === config.id;
+                                            const hasKey = !!apiKeys[config.id];
+                                            const status = validationStatus[config.id] || 'idle';
+                                            const errMsg = validationMessage[config.id] || '';
+
+                                            return (
+                                                <div 
+                                                    key={config.id}
+                                                    className="p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 transition-all space-y-3"
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <div>
+                                                            <div className="text-sm font-bold text-white flex items-center gap-2">
+                                                                {config.name}
+                                                                <StatusBadge 
+                                                                    available={providerStatus?.currentProvider === config.id} 
+                                                                    configured={hasKey} 
+                                                                />
+                                                            </div>
+                                                            <div className="text-xs text-white/40 mt-0.5">{config.desc}</div>
+                                                        </div>
+
+                                                        <div className="flex gap-2">
+                                                            {hasKey && (
+                                                                <button
+                                                                    onClick={() => handleDeleteApiKey(config.id)}
+                                                                    className="p-2 text-white/40 hover:text-red-400 bg-white/5 hover:bg-red-500/10 rounded-xl border border-white/5 transition-all"
+                                                                    title="Delete key"
+                                                                >
+                                                                    <Trash2 size={14} />
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                onClick={() => {
+                                                                    if (isEditing) {
+                                                                        setEditingKeyProvider(null);
+                                                                        setTempKeyValue('');
+                                                                    } else {
+                                                                        setEditingKeyProvider(config.id);
+                                                                        setTempKeyValue(apiKeys[config.id] || '');
+                                                                        // Reset validation
+                                                                        setValidationStatus(prev => ({ ...prev, [config.id]: 'idle' }));
+                                                                    }
+                                                                }}
+                                                                className="px-3.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-xs font-bold transition-all text-indigo-300"
+                                                            >
+                                                                {isEditing ? 'Cancel' : hasKey ? 'Edit Key' : 'Add Key'}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Key editing block */}
+                                                    {isEditing && (
+                                                        <div className="space-y-3 pt-3 border-t border-white/5">
+                                                            {config.id === 'custom' && (
+                                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder="Custom Provider Name"
+                                                                        value={customProviderName}
+                                                                        onChange={(e) => setCustomProviderName(e.target.value)}
+                                                                        className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-indigo-500"
+                                                                    />
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder="Base URL (e.g. http://localhost:8080/v1)"
+                                                                        value={customBaseUrl}
+                                                                        onChange={(e) => setCustomBaseUrl(e.target.value)}
+                                                                        className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-mono outline-none focus:border-indigo-500"
+                                                                    />
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder="Model Name (e.g. llama3)"
+                                                                        value={customModelName}
+                                                                        onChange={(e) => setCustomModelName(e.target.value)}
+                                                                        className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-mono outline-none focus:border-indigo-500"
+                                                                    />
+                                                                </div>
+                                                            )}
+
+                                                            <div className="flex gap-2">
+                                                                <div className="relative flex-1">
+                                                                    <input
+                                                                        type="password"
+                                                                        placeholder="Paste API credential key..."
+                                                                        value={tempKeyValue}
+                                                                        onChange={(e) => setTempKeyValue(e.target.value)}
+                                                                        className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-indigo-500 font-mono"
+                                                                    />
+                                                                    {status === 'validating' && (
+                                                                        <Loader2 className="absolute right-3 top-3 animate-spin text-indigo-400" size={16} />
+                                                                    )}
+                                                                    {status === 'success' && (
+                                                                        <Check className="absolute right-3 top-3 text-green-400" size={16} />
+                                                                    )}
+                                                                    {status === 'error' && (
+                                                                        <AlertCircle className="absolute right-3 top-3 text-red-400" size={16} />
+                                                                    )}
+                                                                </div>
+                                                                <button
+                                                                    disabled={status === 'validating'}
+                                                                    onClick={() => handleSaveApiKey(config.id)}
+                                                                    className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/10 flex items-center gap-1.5"
+                                                                >
+                                                                    {status === 'validating' ? 'Validating...' : 'Validate & Save'}
+                                                                </button>
+                                                            </div>
+
+                                                            {errMsg && (
+                                                                <p className="text-[11px] text-red-400 flex items-start gap-1 font-medium bg-red-500/5 p-2.5 rounded-lg border border-red-500/10">
+                                                                    <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                                                                    {errMsg}
+                                                                </p>
+                                                            )}
+
+                                                            {config.url && config.url !== '#' && (
+                                                                <button
+                                                                    onClick={() => window.nizhal?.app?.openExternal(config.url)}
+                                                                    className="text-[10px] text-indigo-400 hover:underline text-left block"
+                                                                >
+                                                                    How to obtain a {config.name} API Key? Click here to visit developer portal.
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
+
+                                                    {/* If Key is saved, show Model selection & Primary use options */}
+                                                    {hasKey && !isEditing && (
+                                                        <div className="pt-3 border-t border-white/5 flex flex-wrap gap-2 items-center justify-between">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-xs text-white/50">Active Model:</span>
+                                                                <select
+                                                                    value={preferences[`aiModel_${config.id}`] || ''}
+                                                                    onChange={(e) => handleModelChange(config.id, e.target.value)}
+                                                                    className="bg-black/30 border border-white/10 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-indigo-500"
+                                                                >
+                                                                    <option value="" disabled className="bg-gray-900">Select model</option>
+                                                                    {availableModels
+                                                                        .filter(m => m.provider === config.id)
+                                                                        .map(model => (
+                                                                            <option key={model.id} value={model.id} className="bg-gray-900">
+                                                                                {model.name}
+                                                                            </option>
+                                                                        ))
+                                                                    }
+                                                                </select>
+                                                            </div>
+
+                                                            {providerStatus?.currentProvider !== config.id && (
+                                                                <button
+                                                                    onClick={() => handleProviderSelect(config.id)}
+                                                                    className="px-3 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-lg text-xs font-semibold border border-indigo-500/20 transition-all"
+                                                                >
+                                                                    Use as Primary Brain
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* FALLBACK SETTINGS */}
+                                <div className="p-5 rounded-2xl bg-white/5 border border-white/10 space-y-4 pt-4">
+                                    <h4 className="text-xs font-semibold text-white/50 tracking-wider uppercase">Auto Fallback Redundancy</h4>
+                                    <SettingRow 
+                                        label="Enable Failover Routing" 
+                                        description="Automatically hand over user intents to next-priority cloud providers if local machine or preferred brain times out."
+                                    >
+                                        <Toggle 
+                                            enabled={providerStatus?.fallbackEnabled ?? true} 
+                                            onChange={async (val) => {
+                                                await window.nizhal?.ai.setFallbackEnabled(val);
+                                                await handlePreferenceChange('enableFallback', val);
+                                                const s = await window.nizhal?.ai.getProviderStatus();
+                                                setProviderStatus(s);
+                                            }} 
+                                        />
+                                    </SettingRow>
+
+                                    <div className="p-3 bg-black/20 border border-white/5 rounded-xl text-xs text-white/50 leading-relaxed font-mono">
+                                        Primary routing path priority order:
+                                        <span className="text-indigo-400 font-bold block mt-1">
+                                            {providerStatus?.providerPriority?.join(' ──> ') || 'ollama ──> gemini ──> openai ──> anthropic'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+
+                        {activeSection === 'hardware' && (
+                            <motion.div
+                                key="hardware"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                className="space-y-6 max-w-3xl"
+                            >
+                                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/5">
+                                    <Monitor className="text-indigo-400" size={18} />
+                                    <h3 className="text-base font-bold">Hardware & Interaction</h3>
+                                </div>
+
+                                <div className="space-y-2">
                                     {availableMonitors && availableMonitors.length > 0 && (
-                                        <SettingRow label="Display Monitor" description="Select which screen to show on">
+                                        <SettingRow label="Active Screen / Display" description="Route character rendering to specific connected visual hardware screen.">
                                             <select
                                                 value={preferences.characterMonitor || availableMonitors[0]}
                                                 onChange={async (e) => {
@@ -658,7 +1034,7 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
                                                     handlePreferenceChange('characterMonitor', val);
                                                     await window.nizhal?.windowControls?.setMonitor?.(val);
                                                 }}
-                                                className="bg-black/20 border border-white/10 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-indigo-500/50"
+                                                className="bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-indigo-500"
                                             >
                                                 {availableMonitors.map((mon) => (
                                                     <option key={mon} value={mon} className="bg-gray-900">
@@ -669,724 +1045,272 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
                                         </SettingRow>
                                     )}
 
-                                    <SettingRow label="Click Through" description="Allow clicking windows behind character">
-                                        <Toggle
-                                            enabled={preferences.clickThrough ?? true}
+                                    <SettingRow label="Interact with mouse hover click-through" description="Allow clicks to pass through transparent character body mesh.">
+                                        <Toggle 
+                                            enabled={preferences.clickThrough ?? true} 
                                             onChange={async (value) => {
                                                 handlePreferenceChange('clickThrough', value);
-                                                // Sync with unified state
                                                 await window.nizhal?.state?.set?.('ui.clickThrough', value);
                                                 await window.nizhal?.character?.setClickThrough?.(value);
                                             }}
                                         />
                                     </SettingRow>
 
-                                    <div className="flex gap-2">
-                                        {['low', 'medium', 'high'].map((q) => (
-                                            <button
-                                                key={q}
-                                                className={`flex-1 py-2 rounded-lg text-xs capitalize ${preferences.characterQuality === q
-                                                    ? 'bg-indigo-500/30 text-white'
-                                                    : 'bg-white/5 text-white/60 hover:bg-white/10'
-                                                    }`}
-                                                onClick={() => handlePreferenceChange('characterQuality', q)}
-                                            >
-                                                {q} Quality
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Behavior Settings */}
-                                <div className="space-y-3 border-t border-white/5 pt-4">
-                                    <h3 className="text-sm font-medium text-white/70">Behavior</h3>
-
-                                    <SettingRow label="Enable Gravity" description="Character falls and sits on taskbar">
-                                        <Toggle
-                                            enabled={preferences.enableGravity}
-                                            onChange={(value) => handlePreferenceChange('enableGravity', value)}
+                                    <SettingRow label="Real-time Mouse Tracking" description="Make VRM Avatar eyes and head follow mouse movements in background">
+                                        <Toggle 
+                                            enabled={preferences.mouseTracking !== false} 
+                                            onChange={(val) => handlePreferenceChange('mouseTracking', val)} 
                                         />
                                     </SettingRow>
 
-                                    <SettingRow label="Dance to Music" description="Responds to audio beats">
-                                        <Toggle
-                                            enabled={preferences.enableDance !== false}
-                                            onChange={(value) => handlePreferenceChange('enableDance', value)}
+                                    <SettingRow label="Auto Blinking" description="Simulate natural eye-lid blinking timings on character models">
+                                        <Toggle 
+                                            enabled={preferences.autoBlink !== false} 
+                                            onChange={(val) => handlePreferenceChange('autoBlink', val)} 
                                         />
                                     </SettingRow>
 
-                                    <SettingRow label="Mouse Tracking" description="Eyes follow cursor">
-                                        <Toggle
-                                            enabled={preferences.mouseTracking !== false}
-                                            onChange={(value) => handlePreferenceChange('mouseTracking', value)}
+                                    <SettingRow label="Enable gravity sitting" description="Make avatar drop with physical velocity and sit comfortably on the taskbar">
+                                        <Toggle 
+                                            enabled={preferences.enableGravity} 
+                                            onChange={(val) => handlePreferenceChange('enableGravity', val)} 
                                         />
                                     </SettingRow>
 
-                                    <SettingRow label="Auto Blink" description="Natural blinking animation">
-                                        <Toggle
-                                            enabled={preferences.autoBlink !== false}
-                                            onChange={(value) => handlePreferenceChange('autoBlink', value)}
+                                    <SettingRow label="Visual Beat Dancing" description="Allow character VRM skeleton to dance dynamically to active music playing on desktop audio device">
+                                        <Toggle 
+                                            enabled={preferences.enableDance !== false} 
+                                            onChange={(val) => handlePreferenceChange('enableDance', val)} 
                                         />
                                     </SettingRow>
                                 </div>
 
-                                {/* Position Presets */}
-                                <div className="space-y-3 border-t border-white/5 pt-4">
-                                    <h3 className="text-sm font-medium text-white/70">Quick Position</h3>
-                                    <div className="grid grid-cols-4 gap-2">
-                                        {[
-                                            { pos: 'top-left', icon: '↖️' },
-                                            { pos: 'top-right', icon: '↗️' },
-                                            { pos: 'bottom-left', icon: '↙️' },
-                                            { pos: 'bottom-right', icon: '↘️' }
-                                        ].map(({ pos, icon }) => (
-                                            <button
-                                                key={pos}
-                                                className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-lg"
-                                                onClick={() => window.nizhal?.character?.snap?.(pos)}
-                                            >
-                                                {icon}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </motion.div>
-                        )}
-
-                        {activeTab === 'ai' && (
-                            <motion.div
-                                key="ai"
-                                initial={{ opacity: 0, x: -20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: 20 }}
-                                className="space-y-6"
-                            >
-                                {/* Current Provider Status */}
-                                <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/20">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <span className="text-sm font-medium text-white">Active Provider</span>
-                                        <span className="text-xs px-2 py-1 bg-indigo-500/20 text-indigo-300 rounded-full">
-                                            {providerStatus?.currentProvider || 'auto'}
-                                        </span>
-                                    </div>
-                                    <p className="text-xs text-white/50">
-                                        {providerStatus?.ollamaAvailable
-                                            ? '✓ Local AI available'
-                                            : '✗ Local AI not running, using cloud providers'}
-                                    </p>
-                                </div>
-
-                                {/* Local AI Section */}
-                                <div className="space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <h3 className="text-sm font-medium text-white/70">Local AI (Ollama)</h3>
-                                        <motion.button
-                                            whileTap={{ scale: 0.95 }}
-                                            onClick={checkLocalAI}
-                                            className="text-xs text-indigo-400 hover:text-indigo-300"
+                                {/* Troubleshooting section */}
+                                <div className="space-y-4 pt-4 border-t border-white/5">
+                                    <h4 className="text-xs font-semibold text-white/50 tracking-wider uppercase">Voice Agent Hardware Diagnostics</h4>
+                                    
+                                    <div className="p-4 rounded-xl bg-orange-500/5 border border-orange-500/10 flex items-center justify-between">
+                                        <div>
+                                            <div className="text-sm font-semibold text-white">Restart Voice Realtime Agent</div>
+                                            <div className="text-xs text-white/40 mt-1">Clears audio buffer leaks and resets microphone connections</div>
+                                        </div>
+                                        <button
+                                            onClick={async () => {
+                                                try {
+                                                    await window.nizhal?.livekit?.restartAgent?.();
+                                                    toast.success('Realtime LiveKit voice agent successfully restarted');
+                                                } catch (e) {
+                                                    toast.error('Failed to restart Voice agent');
+                                                }
+                                            }}
+                                            className="px-4 py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-xl text-xs font-bold border border-orange-500/20 transition-all flex items-center gap-1.5"
                                         >
-                                            Refresh Status
-                                        </motion.button>
-                                    </div>
-
-                                    <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${providerStatus?.ollamaAvailable ? 'bg-green-500/20' : 'bg-white/10'}`}>
-                                                    <span className="text-xl">🦙</span>
-                                                </div>
-                                                <div>
-                                                    <div className="text-sm font-medium text-white">Ollama</div>
-                                                    <div className="text-xs text-white/40">Free, private, runs locally</div>
-                                                </div>
-                                            </div>
-                                            <StatusIndicator available={providerStatus?.ollamaAvailable} configured={true} />
-                                        </div>
-
-                                        {!providerStatus?.ollamaAvailable && (
-                                            <div className="mt-3 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-                                                <p className="text-xs text-yellow-300 mb-2">
-                                                    Ollama is not running. Start it for free local AI:
-                                                </p>
-                                                <motion.button
-                                                    whileTap={{ scale: 0.95 }}
-                                                    onClick={() => openExternal('https://ollama.com')}
-                                                    className="text-xs text-yellow-400 underline"
-                                                >
-                                                    Download Ollama →
-                                                </motion.button>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Cloud Providers */}
-                                <div className="space-y-3">
-                                    <h3 className="text-sm font-medium text-white/70">Cloud Providers</h3>
-
-                                    <div className="space-y-2">
-                                        {aiProviders.filter(p => p.id !== 'ollama').map((provider) => (
-                                            <motion.div
-                                                key={provider.id}
-                                                whileHover={{ backgroundColor: 'rgba(255,255,255,0.05)' }}
-                                                className="p-4 rounded-xl bg-white/5 border border-white/10"
-                                            >
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${provider.available ? 'bg-green-500/20' : 'bg-white/10'}`}>
-                                                            {provider.id === 'gemini' && <span className="text-xl">✨</span>}
-                                                            {provider.id === 'openai' && <span className="text-xl">🤖</span>}
-                                                            {provider.id === 'anthropic' && <span className="text-xl">🧠</span>}
-                                                        </div>
-                                                        <div>
-                                                            <div className="text-sm font-medium text-white">{provider.name}</div>
-                                                            <div className="text-xs text-white/40">{provider.description}</div>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-3">
-                                                        <StatusIndicator available={provider.available} configured={provider.configured} />
-                                                        <motion.button
-                                                            whileTap={{ scale: 0.95 }}
-                                                            onClick={() => {
-                                                                setShowApiKeyModal(provider.id);
-                                                                setApiKeyValue(preferences.apiKeys?.[provider.id] || '');
-                                                            }}
-                                                            className="text-xs px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-white/70"
-                                                        >
-                                                            {provider.configured ? 'Edit' : 'Add Key'}
-                                                        </motion.button>
-                                                    </div>
-                                                </div>
-
-                                                {/* Model Selection Dropdown */}
-                                                {provider.configured && availableModels.some(m => m.provider === provider.id) && (
-                                                    <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
-                                                        <span className="text-xs text-white/50">Model</span>
-                                                        <select
-                                                            value={preferences[`${provider.id}Model`] || provider.models?.[0] || ''}
-                                                            onChange={(e) => handleModelChange(provider.id, e.target.value)}
-                                                            className="bg-white/5 text-xs text-white rounded px-2 py-1 border border-white/10 outline-none focus:border-indigo-500/50"
-                                                        >
-                                                            {availableModels
-                                                                .filter(m => m.provider === provider.id)
-                                                                .map(model => (
-                                                                    <option key={model.id} value={model.id} className="bg-[#1a1a1a]">
-                                                                        {model.name}
-                                                                    </option>
-                                                                ))
-                                                            }
-                                                        </select>
-                                                    </div>
-                                                )}
-
-                                                {provider.configured && providerStatus?.currentProvider !== provider.id && (
-                                                    <motion.button
-                                                        whileTap={{ scale: 0.95 }}
-                                                        onClick={() => handleProviderSelect(provider.id)}
-                                                        className="mt-3 w-full py-2 text-xs bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 rounded-lg"
-                                                    >
-                                                        Use as Primary
-                                                    </motion.button>
-                                                )}
-                                            </motion.div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Fallback Settings */}
-                                <div className="space-y-3 border-t border-white/5 pt-4">
-                                    <h3 className="text-sm font-medium text-white/70">Fallback Settings</h3>
-
-                                    <SettingRow
-                                        label="Automatic Fallback"
-                                        description="Try other providers if primary fails"
-                                    >
-                                        <Toggle
-                                            enabled={providerStatus?.fallbackEnabled ?? true}
-                                            onChange={handleFallbackToggle}
-                                        />
-                                    </SettingRow>
-
-                                    <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                                        <p className="text-xs text-white/50">
-                                            Priority: {providerStatus?.providerPriority?.join(' → ') || 'ollama → gemini → openai → anthropic'}
-                                        </p>
+                                            <RefreshCw size={14} /> Restart Agent
+                                        </button>
                                     </div>
                                 </div>
                             </motion.div>
                         )}
 
-                        {activeTab === 'voice' && (
+                        {activeSection === 'system' && (
                             <motion.div
-                                key="voice"
-                                initial={{ opacity: 0, x: -20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: 20 }}
-                                className="space-y-6"
+                                key="system"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                className="space-y-6 max-w-3xl"
                             >
-                                {/* Voice Input */}
-                                <div className="space-y-3">
-                                    <h3 className="text-sm font-medium text-white/70">Voice Input</h3>
+                                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/5">
+                                    <Terminal className="text-indigo-400" size={18} />
+                                    <h3 className="text-base font-bold">System, Secrets & Environment</h3>
+                                </div>
 
-                                    <SettingRow
-                                        label="Voice Commands"
-                                        description="Use microphone to talk to AI"
-                                    >
-                                        <Toggle
-                                            enabled={preferences.voiceInputEnabled}
-                                            onChange={(value) => handlePreferenceChange('voiceInputEnabled', value)}
-                                        />
-                                    </SettingRow>
-
-                                    <SettingRow
-                                        label="Wake Word"
-                                        description='Say "Hey Nizhal" to activate'
-                                    >
-                                        <Toggle
-                                            enabled={preferences.wakeWordEnabled}
-                                            onChange={(value) => handlePreferenceChange('wakeWordEnabled', value)}
-                                        />
-                                    </SettingRow>
-
-                                    <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                                        <p className="text-xs text-white/50 mb-2">Supported languages:</p>
-                                        <div className="flex flex-wrap gap-1">
-                                            {['English', 'Malayalam', 'Hindi', 'Tamil', 'Telugu'].map(lang => (
-                                                <span key={lang} className="text-xs px-2 py-1 bg-white/10 rounded text-white/60">
-                                                    {lang}
-                                                </span>
-                                            ))}
-                                        </div>
+                                {/* System metadata block */}
+                                <div className="grid grid-cols-2 gap-3 p-4 bg-white/5 border border-white/5 rounded-2xl">
+                                    <div>
+                                        <span className="text-[10px] text-white/40 block uppercase tracking-wider">Application Platform</span>
+                                        <span className="text-xs font-semibold text-white/80 mt-1 block">Linux Tauri App Native</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] text-white/40 block uppercase tracking-wider">Build Sandbox</span>
+                                        <span className="text-xs font-semibold text-white/80 mt-1 block">Production Local Mode</span>
                                     </div>
                                 </div>
 
-                                {/* Voice Output */}
-                                <div className="space-y-3 border-t border-white/5 pt-4">
-                                    <h3 className="text-sm font-medium text-white/70">Voice Output</h3>
-
-                                    <SettingRow
-                                        label="Enable Speech"
-                                        description="AI speaks responses aloud"
-                                    >
-                                        <Toggle
-                                            enabled={preferences.voiceEnabled}
-                                            onChange={(value) => handlePreferenceChange('voiceEnabled', value)}
-                                        />
-                                    </SettingRow>
-                                </div>
-
-                                {/* ElevenLabs API */}
-                                <div className="space-y-3 border-t border-white/5 pt-4">
-                                    <h3 className="text-sm font-medium text-white/70">Premium Voice (ElevenLabs)</h3>
-
-                                    <motion.button
-                                        whileHover={{ backgroundColor: 'rgba(255,255,255,0.05)' }}
-                                        onClick={() => {
-                                            setShowApiKeyModal('elevenlabs');
-                                            setApiKeyValue(preferences.apiKeys?.elevenlabs || '');
-                                        }}
-                                        className="w-full flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${preferences.apiKeys?.elevenlabs ? 'bg-green-500/20' : 'bg-white/10'}`}>
-                                                <span className="text-xl">🎙️</span>
-                                            </div>
-                                            <div className="text-left">
-                                                <div className="text-sm font-medium text-white">ElevenLabs API</div>
-                                                <div className="text-xs text-white/40">Ultra-realistic AI voices</div>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            {preferences.apiKeys?.elevenlabs
-                                                ? <span className="text-xs text-green-400">✓ Set</span>
-                                                : <span className="text-xs text-white/30">Not set</span>
-                                            }
-                                            <svg className="w-4 h-4 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                            </svg>
-                                        </div>
-                                    </motion.button>
-                                </div>
-
-                                {/* Troubleshooting */}
-                                <div className="space-y-3 border-t border-white/5 pt-4">
-                                    <h3 className="text-sm font-medium text-white/70">Troubleshooting</h3>
-                                    <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <div className="text-sm font-medium text-white">Restart Voice Agent</div>
-                                                <div className="text-xs text-white/50">Fix connection or audio issues</div>
-                                            </div>
-                                            <motion.button
-                                                whileTap={{ scale: 0.95 }}
-                                                onClick={async () => {
-                                                    try {
-                                                        await window.nizhal?.livekit?.restartAgent?.();
-                                                        toast.success('Voice Agent restart triggered');
-                                                    } catch (err) {
-                                                        console.error(err);
-                                                        toast.error('Failed to restart Voice Agent');
-                                                    }
-                                                }}
-                                                className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs text-white flex items-center gap-1.5"
-                                            >
-                                                <RefreshCw size={14} /> Restart
-                                            </motion.button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        )}
-
-
-                        {activeTab === 'secrets' && (
-                            <motion.div
-                                key="secrets"
-                                initial={{ opacity: 0, x: -20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: 20 }}
-                                className="space-y-6"
-                            >
-                                <div className="p-4 rounded-xl bg-gradient-to-br from-amber-500/10 to-red-500/10 border border-amber-500/20">
-                                    <div className="flex items-center gap-3 mb-2">
-                                        <Lock className="text-amber-400" size={20} />
-                                        <h3 className="text-sm font-medium text-white">Environment Secrets</h3>
-                                    </div>
-                                    <p className="text-xs text-white/50">
-                                        Manage your API keys and sensitive configuration stored in .env file.
-                                        Changes applied immediately require restart for some services.
-                                    </p>
-                                </div>
-
-                                <div className="space-y-3">
+                                {/* SECRETS MANAGER */}
+                                <div className="space-y-3 pt-2">
                                     <div className="flex justify-between items-center">
-                                        <h3 className="text-sm font-medium text-white/70">Secrets List</h3>
-                                        <motion.button
-                                            whileTap={{ scale: 0.95 }}
+                                        <div>
+                                            <h4 className="text-sm font-bold text-white">Environment Secrets (.env)</h4>
+                                            <p className="text-xs text-white/40 mt-0.5">Manage plaintext configuration strings stored natively</p>
+                                        </div>
+                                        <button
                                             onClick={() => setIsAddingSecret(true)}
-                                            className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 rounded-lg text-xs flex items-center gap-1.5"
+                                            className="px-3 py-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 text-indigo-400 rounded-xl text-xs font-bold transition-all flex items-center gap-1"
                                         >
-                                            <Plus size={14} /> Add New
-                                        </motion.button>
+                                            <Plus size={14} /> Add Secret
+                                        </button>
                                     </div>
 
-                                    {/* Add New Secret Form */}
+                                    {/* Adding Form */}
                                     {isAddingSecret && (
                                         <div className="p-4 rounded-xl bg-white/5 border border-indigo-500/30 space-y-3">
-                                            <div>
-                                                <label className="text-xs text-white/50 block mb-1">Key Name (uppercase)</label>
-                                                <input
-                                                    type="text"
-                                                    value={newSecret.key}
-                                                    onChange={(e) => setNewSecret(prev => ({ ...prev, key: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '') }))}
-                                                    placeholder="MY_API_KEY"
-                                                    className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm font-mono text-white focus:border-indigo-500/50 outline-none"
-                                                />
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label className="text-[10px] text-white/40 uppercase block mb-1">Key Name</label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="e.g. GEMINI_MODEL_VERSION"
+                                                        value={newSecret.key}
+                                                        onChange={(e) => setNewSecret(prev => ({ ...prev, key: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '') }))}
+                                                        className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-mono outline-none"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] text-white/40 uppercase block mb-1">Secret Value</label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Configure value string..."
+                                                        value={newSecret.value}
+                                                        onChange={(e) => setNewSecret(prev => ({ ...prev, value: e.target.value }))}
+                                                        className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none"
+                                                    />
+                                                </div>
                                             </div>
-                                            <div>
-                                                <label className="text-xs text-white/50 block mb-1">Value</label>
-                                                <input
-                                                    type="text"
-                                                    value={newSecret.value}
-                                                    onChange={(e) => setNewSecret(prev => ({ ...prev, value: e.target.value }))}
-                                                    placeholder="Secret value..."
-                                                    className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-indigo-500/50 outline-none"
-                                                />
-                                            </div>
-                                            <div className="flex justify-end gap-2 pt-1">
-                                                <button
-                                                    onClick={() => setIsAddingSecret(false)}
-                                                    className="px-3 py-1.5 text-xs text-white/50 hover:text-white"
-                                                >
-                                                    Cancel
-                                                </button>
-                                                <button
-                                                    onClick={() => handleSaveSecret(newSecret.key, newSecret.value)}
-                                                    disabled={!newSecret.key}
-                                                    className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs disabled:opacity-50"
-                                                >
-                                                    Save Secret
-                                                </button>
+                                            <div className="flex justify-end gap-2">
+                                                <button onClick={() => setIsAddingSecret(false)} className="px-3 py-1.5 text-xs text-white/40 hover:text-white">Cancel</button>
+                                                <button onClick={() => handleSaveSecret(newSecret.key, newSecret.value)} className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/10">Save Secret</button>
                                             </div>
                                         </div>
                                     )}
 
-                                    {/* Existing Secrets */}
-                                    <div className="space-y-2">
+                                    {/* Secrets list */}
+                                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                                         {Object.entries(secrets).map(([key, value]) => {
                                             const isEditing = editingSecret?.key === key;
                                             const isVisible = visibleSecrets.has(key);
-
                                             return (
-                                                <div key={key} className="p-3 bg-white/5 border border-white/10 rounded-xl group hover:border-white/20 transition-colors">
+                                                <div 
+                                                    key={key} 
+                                                    className="p-3 bg-white/5 border border-white/5 hover:border-white/10 rounded-xl flex items-center justify-between gap-4 transition-all"
+                                                >
                                                     {isEditing ? (
-                                                        <div className="flex gap-2 items-center">
+                                                        <div className="flex-1 flex gap-2 items-center">
                                                             <div className="flex-1">
-                                                                <div className="text-xs font-mono text-indigo-400 mb-1">{key}</div>
+                                                                <div className="text-[10px] text-indigo-400 font-mono mb-1">{key}</div>
                                                                 <input
                                                                     type="text"
                                                                     value={editingSecret.value}
                                                                     onChange={(e) => setEditingSecret({ ...editingSecret, value: e.target.value })}
-                                                                    className="w-full bg-black/20 border border-white/10 rounded-lg px-2 py-1 text-sm text-white outline-none focus:border-indigo-500/50"
-                                                                    autoFocus
+                                                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-2.5 py-1 text-xs text-white outline-none focus:border-indigo-500"
                                                                 />
                                                             </div>
                                                             <button
                                                                 onClick={() => handleSaveSecret(key, editingSecret.value)}
-                                                                className="p-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30"
+                                                                className="p-2 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-xl border border-green-500/20"
                                                             >
-                                                                <Save size={16} />
+                                                                <Save size={14} />
                                                             </button>
                                                             <button
                                                                 onClick={() => setEditingSecret(null)}
-                                                                className="p-2 bg-white/10 text-white/70 rounded-lg hover:bg-white/20"
+                                                                className="p-2 bg-white/5 hover:bg-white/10 text-white/60 rounded-xl"
                                                             >
-                                                                <X size={16} />
+                                                                <X size={14} />
                                                             </button>
                                                         </div>
                                                     ) : (
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="flex-1 min-w-0 pr-4">
-                                                                <div className="text-xs font-mono text-indigo-400 mb-0.5">{key}</div>
-                                                                <div className="text-sm text-white/70 font-mono truncate">
+                                                        <>
+                                                            <div className="min-w-0 flex-1">
+                                                                <div className="text-[10px] text-indigo-400 font-mono font-bold tracking-wider">{key}</div>
+                                                                <div className="text-xs text-white/60 mt-0.5 truncate font-mono">
                                                                     {isVisible ? value : '•'.repeat(Math.min(value.length, 24) || 8)}
                                                                 </div>
                                                             </div>
-
-                                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <div className="flex items-center gap-1 flex-shrink-0">
                                                                 <button
                                                                     onClick={() => toggleSecretVisibility(key)}
-                                                                    className="p-1.5 text-white/40 hover:text-white rounded-lg hover:bg-white/10"
-                                                                    title={isVisible ? "Hide" : "Show"}
+                                                                    className="p-1.5 text-white/40 hover:text-white rounded-lg hover:bg-white/5"
                                                                 >
                                                                     {isVisible ? <EyeOff size={14} /> : <Eye size={14} />}
                                                                 </button>
                                                                 <button
                                                                     onClick={() => setEditingSecret({ key, value })}
-                                                                    className="p-1.5 text-white/40 hover:text-cyan-400 rounded-lg hover:bg-cyan-500/10"
-                                                                    title="Edit"
+                                                                    className="p-1.5 text-white/40 hover:text-indigo-400 rounded-lg hover:bg-white/5"
                                                                 >
                                                                     <Edit2 size={14} />
                                                                 </button>
                                                                 <button
                                                                     onClick={() => handleDeleteSecret(key)}
-                                                                    className="p-1.5 text-white/40 hover:text-red-400 rounded-lg hover:bg-red-500/10"
-                                                                    title="Delete"
+                                                                    className="p-1.5 text-white/40 hover:text-red-400 rounded-lg hover:bg-white/5"
                                                                 >
                                                                     <Trash2 size={14} />
                                                                 </button>
                                                             </div>
-                                                        </div>
+                                                        </>
                                                     )}
                                                 </div>
                                             );
                                         })}
-                                        {Object.keys(secrets).length === 0 && !isAddingSecret && (
-                                            <div className="text-center py-8 text-white/30 text-sm">
-                                                No secrets found in .env
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </motion.div>
-                        )}
-
-                        {activeTab === 'shortcuts' && (
-                            <motion.div
-                                key="shortcuts"
-                                initial={{ opacity: 0, x: -20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: 20 }}
-                                className="space-y-6"
-                            >
-                                {/* Character Interaction */}
-                                <div className="space-y-3">
-                                    <h3 className="text-sm font-medium text-white/70">Character Interaction</h3>
-                                    <div className="space-y-2">
-                                        {[
-                                            { keys: 'Alt + Space', action: 'Toggle interaction mode' },
-                                            { keys: 'Ctrl + Alt + I', action: 'Toggle interaction mode (alt)' },
-                                            { keys: 'Drag (when active)', action: 'Move character' },
-                                            { keys: 'Right Click', action: 'Open context menu' },
-                                            { keys: 'Click Head', action: 'Pat (shows happy reaction)' },
-                                            { keys: 'Click Body', action: 'Poke (shows surprised reaction)' },
-                                            { keys: 'Click Hands', action: 'Wave (shows friendly reaction)' }
-                                        ].map((shortcut, i) => (
-                                            <div key={i} className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-                                                <span className="text-sm text-white/80">{shortcut.action}</span>
-                                                <kbd className="px-2 py-1 bg-white/10 rounded text-xs text-indigo-300 font-mono">{shortcut.keys}</kbd>
-                                            </div>
-                                        ))}
                                     </div>
                                 </div>
 
-                                {/* Window Controls */}
-                                <div className="space-y-3 border-t border-white/5 pt-4">
-                                    <h3 className="text-sm font-medium text-white/70">Window Controls</h3>
-                                    <div className="space-y-2">
-                                        {[
-                                            { keys: 'Ctrl + Shift + N', action: 'Toggle Nizhal visibility' },
-                                            { keys: 'Ctrl + Shift + C', action: 'Open chat window' },
-                                            { keys: 'Escape', action: 'Close menus/panels', note: 'When focused' }
-                                        ].map((shortcut, i) => (
-                                            <div key={i} className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
-                                                <div>
-                                                    <span className="text-sm text-white/80">{shortcut.action}</span>
-                                                    {shortcut.note && <span className="text-xs text-white/40 ml-2">({shortcut.note})</span>}
+                                {/* CLEAR CACHE / HARD DESTRUCTIVE ACTIONS */}
+                                <div className="space-y-4 pt-4 border-t border-white/5">
+                                    <h4 className="text-xs font-semibold text-white/50 tracking-wider uppercase">Application Hard Diagnostics & Reset</h4>
+                                    
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div className="p-4 rounded-xl bg-white/5 border border-white/5 flex flex-col justify-between gap-3">
+                                            <div>
+                                                <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                                                    <HardDrive size={14} className="text-indigo-400" /> Reset Memory & Cache
                                                 </div>
-                                                <kbd className="px-2 py-1 bg-white/10 rounded text-xs text-indigo-300 font-mono">{shortcut.keys}</kbd>
+                                                <p className="text-[11px] text-white/40 mt-1 leading-relaxed">
+                                                    Clears locally stored chat session contextual history files and model inference caches.
+                                                </p>
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
+                                            <button
+                                                onClick={async () => {
+                                                    try {
+                                                        await window.nizhal?.ai?.clearContext?.();
+                                                        toast.success('Inference context memory cleared');
+                                                    } catch (e) {
+                                                        toast.error('Failed to clear memory');
+                                                    }
+                                                }}
+                                                className="w-full py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-xl text-xs font-bold transition-all"
+                                            >
+                                                Clear Session Context Cache
+                                            </button>
+                                        </div>
 
-                                {/* Features */}
-                                <div className="space-y-3 border-t border-white/5 pt-4">
-                                    <h3 className="text-sm font-medium text-white/70">Features</h3>
-                                    <div className="grid grid-cols-1 gap-2">
-                                        <div className="p-3 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-xl border border-indigo-500/20">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-lg">💤</span>
-                                                <span className="text-sm font-medium text-white">Sleep Mode</span>
+                                        <div className="p-4 rounded-xl bg-red-500/5 border border-red-500/10 flex flex-col justify-between gap-3">
+                                            <div>
+                                                <div className="text-xs font-bold text-red-400 flex items-center gap-1.5">
+                                                    <Shield size={14} /> Destructive Factory Reset
+                                                </div>
+                                                <p className="text-[11px] text-white/40 mt-1 leading-relaxed">
+                                                    Restores complete factory defaults, removes secure OS keyrings and wipes system preferences.
+                                                </p>
                                             </div>
-                                            <p className="text-xs text-white/50">Character sleeps when you're idle for 1 minute</p>
-                                        </div>
-                                        <div className="p-3 bg-gradient-to-r from-pink-500/10 to-rose-500/10 rounded-xl border border-pink-500/20">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-lg">💕</span>
-                                                <span className="text-sm font-medium text-white">Compliments</span>
-                                            </div>
-                                            <p className="text-xs text-white/50">Random encouragement every 5 minutes</p>
-                                        </div>
-                                        <div className="p-3 bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-xl border border-green-500/20">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-lg">🪑</span>
-                                                <span className="text-sm font-medium text-white">Window Sitting</span>
-                                            </div>
-                                            <p className="text-xs text-white/50">Character can sit on windows and taskbar</p>
+                                            <button
+                                                onClick={async () => {
+                                                    if (confirm('CAUTION: This will wipe out all API keys, custom configs, and restart onboarding. Continue?')) {
+                                                        await handlePreferenceChange('onboardingComplete', false);
+                                                        window.location.reload();
+                                                    }
+                                                }}
+                                                className="w-full py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl text-xs font-bold transition-all"
+                                            >
+                                                Restart Onboarding Wizard
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
                             </motion.div>
                         )}
                     </AnimatePresence>
-
-                    {/* Attribution Footer */}
-                    <div className="pt-4 pb-2">
-                        <Attribution variant="full" />
-                        <div className="flex justify-center gap-4 text-xs text-white/20 mt-3">
-                            <button onClick={() => setShowLegalModal('privacy')} className="hover:text-white/40">Privacy</button>
-                            <button onClick={() => setShowLegalModal('terms')} className="hover:text-white/40">Terms</button>
-                            <button onClick={() => openExternal('https://github.com/John-Varghese-EH/Nizhal-AI/releases')} className="hover:text-white/40">Changelog</button>
-                        </div>
-                    </div>
                 </div>
             </div>
-
-            {/* API Key Modal */}
-            {
-                showApiKeyModal && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-                        onClick={() => setShowApiKeyModal(null)}
-                    >
-                        <motion.div
-                            initial={{ scale: 0.9 }}
-                            animate={{ scale: 1 }}
-                            onClick={(e) => e.stopPropagation()}
-                            className="bg-gray-900 rounded-2xl p-6 max-w-sm w-full border border-white/10"
-                        >
-                            <h3 className="text-lg font-bold text-white mb-2">
-                                {apiKeyConfigs.find(a => a.id === showApiKeyModal)?.name || 'API Key'}
-                            </h3>
-                            <p className="text-xs text-white/50 mb-4">
-                                {apiKeyConfigs.find(a => a.id === showApiKeyModal)?.description}
-                            </p>
-
-                            {showApiKeyModal === 'custom' ? (
-                                <div className="space-y-3 mb-4">
-                                    <div>
-                                        <label className="text-xs text-white/50 block mb-1">Provider Name</label>
-                                        <input
-                                            type="text"
-                                            value={customProviderName}
-                                            onChange={(e) => setCustomProviderName(e.target.value)}
-                                            placeholder="e.g. Groq, DeepSeek"
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/50"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs text-white/50 block mb-1">Base URL (Required)</label>
-                                        <input
-                                            type="text"
-                                            value={customBaseUrl}
-                                            onChange={(e) => setCustomBaseUrl(e.target.value)}
-                                            placeholder="https://api.groq.com/openai/v1"
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white font-mono focus:outline-none focus:border-indigo-500/50"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs text-white/50 block mb-1">API Key (Required)</label>
-                                        <input
-                                            type="password"
-                                            value={apiKeyValue}
-                                            onChange={(e) => setApiKeyValue(e.target.value)}
-                                            placeholder="sk-..."
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/50"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs text-white/50 block mb-1">Model ID (Optional)</label>
-                                        <input
-                                            type="text"
-                                            value={customModelName}
-                                            onChange={(e) => setCustomModelName(e.target.value)}
-                                            placeholder="llama3-70b-8192"
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white font-mono focus:outline-none focus:border-indigo-500/50"
-                                        />
-                                    </div>
-                                </div>
-                            ) : (
-                                <input
-                                    type="password"
-                                    value={apiKeyValue}
-                                    onChange={(e) => setApiKeyValue(e.target.value)}
-                                    placeholder="Enter your API key"
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/30 focus:outline-none focus:border-indigo-500/50 mb-3"
-                                />
-                            )}
-
-                            <motion.button
-                                whileTap={{ scale: 0.95 }}
-                                onClick={() => openExternal(apiKeyConfigs.find(a => a.id === showApiKeyModal)?.url || '#')}
-                                className="w-full text-xs text-indigo-400 hover:text-indigo-300 mb-4 text-left"
-                            >
-                                Get API key →
-                            </motion.button>
-
-                            <div className="flex gap-2">
-                                <motion.button
-                                    whileTap={{ scale: 0.95 }}
-                                    onClick={() => setShowApiKeyModal(null)}
-                                    className="flex-1 py-2 bg-white/10 text-white rounded-xl"
-                                >
-                                    Cancel
-                                </motion.button>
-                                <motion.button
-                                    whileTap={{ scale: 0.95 }}
-                                    onClick={handleSaveApiKey}
-                                    disabled={isSaving}
-                                    className="flex-1 py-2 bg-indigo-600 text-white rounded-xl disabled:opacity-50"
-                                >
-                                    {isSaving ? 'Saving...' : 'Save'}
-                                </motion.button>
-                            </div>
-                        </motion.div>
-                    </motion.div>
-                )
-            }
 
             {/* Legal Document Viewer Modal */}
             <LegalDocumentViewer
@@ -1394,7 +1318,7 @@ const SettingsView = ({ onBack, onClose, onPersonaChange, privacyMode, onPrivacy
                 onClose={() => setShowLegalModal(null)}
                 initialDocument={showLegalModal || 'terms'}
             />
-        </div >
+        </div>
     );
 };
 

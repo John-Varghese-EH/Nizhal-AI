@@ -44,35 +44,14 @@ pub async fn get_all_env() -> Result<HashMap<String, String>, String> {
 
 #[tauri::command]
 pub async fn set_env(key: String, value: String) -> Result<(), String> {
-    // Only allow setting specific keys
-    let allowed_keys = [
-        "GEMINI_API_KEY",
-        "OPENAI_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "GROQ_API_KEY",
-        "HUGGINGFACE_API_KEY",
-        "TOGETHER_API_KEY",
-        "CUSTOM_API_KEY",
-        "CUSTOM_BASE_URL",
-        "CUSTOM_MODEL",
-        "ELEVENLABS_API_KEY",
-        "DEEPGRAM_API_KEY",
-        "LIVEKIT_URL",
-        "LIVEKIT_API_KEY",
-        "LIVEKIT_API_SECRET",
-        "OLLAMA_URL",
-    ];
-
-    if !allowed_keys.contains(&key.as_str()) {
-        return Err(format!("Setting '{}' is not allowed", key));
-    }
-
+    super::validation::validate_env_key(&key)?;
     std::env::set_var(&key, &value);
     Ok(())
 }
 
 #[tauri::command]
 pub async fn delete_env(key: String) -> Result<(), String> {
+    super::validation::validate_env_key(&key)?;
     std::env::remove_var(&key);
     Ok(())
 }

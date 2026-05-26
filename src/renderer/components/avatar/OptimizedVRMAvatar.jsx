@@ -91,8 +91,16 @@ const OptimizedVRMModel = React.memo(({
                             gltf.scene.traverse((obj) => {
                                 if (obj.geometry) obj.geometry.dispose();
                                 if (obj.material) {
-                                    if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
-                                    else obj.material.dispose();
+                                    const disposeMaterial = (mat) => {
+                                        for (const key of Object.keys(mat)) {
+                                            if (mat[key] && typeof mat[key].dispose === 'function') {
+                                                mat[key].dispose();
+                                            }
+                                        }
+                                        mat.dispose();
+                                    };
+                                    if (Array.isArray(obj.material)) obj.material.forEach(disposeMaterial);
+                                    else disposeMaterial(obj.material);
                                 }
                             });
                             return;
@@ -174,8 +182,16 @@ const OptimizedVRMModel = React.memo(({
                 currentVrm.scene.traverse((obj) => {
                     if (obj.geometry) obj.geometry.dispose();
                     if (obj.material) {
-                        if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
-                        else obj.material.dispose();
+                        const disposeMaterial = (mat) => {
+                            for (const key of Object.keys(mat)) {
+                                if (mat[key] && typeof mat[key].dispose === 'function') {
+                                    mat[key].dispose();
+                                }
+                            }
+                            mat.dispose();
+                        };
+                        if (Array.isArray(obj.material)) obj.material.forEach(disposeMaterial);
+                        else disposeMaterial(obj.material);
                     }
                 });
                 if (currentVrm.scene.parent) {
@@ -217,9 +233,6 @@ const OptimizedVRMModel = React.memo(({
         // Adaptive quality based on performance mode
         const dt = delta;
 
-        // Required for VRM visibility and spring bones
-        vrm.update(dt);
-
         // Update state controller (reduced frequency on low-end)
         const stateController = stateControllerRef.current;
         if (performanceMode !== 'minimal' || frameCountRef.current % 2 === 0) {
@@ -232,49 +245,53 @@ const OptimizedVRMModel = React.memo(({
         // Update VRMA animation mixer (reduced frequency on low-end)
         const vrmaService = vrmaServiceRef.current;
         if (vrmaService) {
-            vrmaService.update(dt);
+            try {
+                vrmaService.update(dt);
 
-            // Detect state changes and trigger appropriate VRMA animation
-            if (currentState !== lastStateRef.current) {
-                lastStateRef.current = currentState;
+                // Detect state changes and trigger appropriate VRMA animation
+                if (currentState !== lastStateRef.current) {
+                    lastStateRef.current = currentState;
 
-                // Map AvatarState to animation state string
-                const stateMap = {
-                    [AvatarState.IDLE]: 'idle',
-                    [AvatarState.SPEAKING]: 'speaking',
-                    [AvatarState.DANCING]: 'dancing',
-                    [AvatarState.SLEEPING]: 'idle', // Fixed: Use idle to keep upright (eyes will still close)
-                    [AvatarState.DRAGGING]: 'dragging',
-                    [AvatarState.SITTING_TASKBAR]: 'sitting',
-                    [AvatarState.SITTING_WINDOW]: 'sitting',
-                    [AvatarState.THINKING]: 'thinking',
-                    [AvatarState.HAPPY]: 'happy',
-                    [AvatarState.EXCITED]: 'happy',
-                    [AvatarState.SAD]: 'idle',
-                    [AvatarState.EMBARRASSED]: 'idle',
-                };
+                    // Map AvatarState to animation state string
+                    const stateMap = {
+                        [AvatarState.IDLE]: 'idle',
+                        [AvatarState.SPEAKING]: 'speaking',
+                        [AvatarState.DANCING]: 'dancing',
+                        [AvatarState.SLEEPING]: 'idle', // Fixed: Use idle to keep upright (eyes will still close)
+                        [AvatarState.DRAGGING]: 'dragging',
+                        [AvatarState.SITTING_TASKBAR]: 'sitting',
+                        [AvatarState.SITTING_WINDOW]: 'sitting',
+                        [AvatarState.THINKING]: 'thinking',
+                        [AvatarState.HAPPY]: 'happy',
+                        [AvatarState.EXCITED]: 'happy',
+                        [AvatarState.SAD]: 'idle',
+                        [AvatarState.EMBARRASSED]: 'idle',
+                    };
 
-                const animState = stateMap[currentState] || 'idle';
-                console.log(`[OptimizedVRMModel] State changed: ${currentState} -> animation: ${animState}`);
-                vrmaService.setState(animState).catch(err => {
-                    console.warn('[OptimizedVRMModel] Failed to set animation state:', err);
-                });
-            }
-
-            // Random idle gestures (reduced frequency on low-end)
-            if (currentState === AvatarState.IDLE) {
-                idleGestureTimerRef.current += dt;
-                const gestureInterval = performanceMode === 'low' ? 60 : 30; // Longer intervals on low-end
-                if (idleGestureTimerRef.current > gestureInterval + Math.random() * gestureInterval) {
-                    idleGestureTimerRef.current = 0;
-                    // Lower chance on low-end devices
-                    const gestureChance = performanceMode === 'low' ? 0.2 : 0.4;
-                    if (Math.random() < gestureChance) {
-                        vrmaService.playRandomGesture();
-                    }
+                    const animState = stateMap[currentState] || 'idle';
+                    console.log(`[OptimizedVRMModel] State changed: ${currentState} -> animation: ${animState}`);
+                    vrmaService.setState(animState).catch(err => {
+                        console.warn('[OptimizedVRMModel] Failed to set animation state:', err);
+                    });
                 }
-            } else {
-                idleGestureTimerRef.current = 0;
+
+                // Random idle gestures (reduced frequency on low-end)
+                if (currentState === AvatarState.IDLE) {
+                    idleGestureTimerRef.current += dt;
+                    const gestureInterval = performanceMode === 'low' ? 60 : 30; // Longer intervals on low-end
+                    if (idleGestureTimerRef.current > gestureInterval + Math.random() * gestureInterval) {
+                        idleGestureTimerRef.current = 0;
+                        // Lower chance on low-end devices
+                        const gestureChance = performanceMode === 'low' ? 0.2 : 0.4;
+                        if (Math.random() < gestureChance) {
+                            vrmaService.playRandomGesture();
+                        }
+                    }
+                } else {
+                    idleGestureTimerRef.current = 0;
+                }
+            } catch (updateErr) {
+                console.warn('[OptimizedVRMAvatar] Animation service tick error:', updateErr);
             }
         }
 
@@ -315,6 +332,9 @@ const OptimizedVRMModel = React.memo(({
         if (currentState === AvatarState.SLEEPING && vrm.expressionManager) {
             vrm.expressionManager.setValue('blink', 1);
         }
+
+        // Required for VRM visibility and spring bones (MUST be called AFTER animation updates)
+        vrm.update(dt);
     });
 
     // Handle interactive animation triggers (must be before any returns - React hooks rule)
@@ -437,7 +457,31 @@ const OptimizedVRMAvatar = React.memo(({
             console.log(`[OptimizedVRMAvatar] Performance mode: ${mode}`);
         };
 
+        const handleVisibilityChange = () => {
+            const isBackground = document.hidden;
+            console.log(`[OptimizedVRMAvatar] Visibility changed: hidden=${isBackground}`);
+            
+            let baseline = 'standard';
+            if (window.nizhal?.system?.getPerformanceMode) {
+                window.nizhal.system.getPerformanceMode().then(({ is_low_end, isLowEnd }) => {
+                    baseline = (is_low_end || isLowEnd) ? 'low' : 'standard';
+                    const activeMode = isBackground ? 'minimal' : baseline;
+                    performanceMode = activeMode;
+                    setCurrentPerformanceMode(activeMode);
+                }).catch(() => {
+                    const activeMode = isBackground ? 'minimal' : 'standard';
+                    performanceMode = activeMode;
+                    setCurrentPerformanceMode(activeMode);
+                });
+            } else {
+                const activeMode = isBackground ? 'minimal' : 'standard';
+                performanceMode = activeMode;
+                setCurrentPerformanceMode(activeMode);
+            }
+        };
+
         window.addEventListener('message', handlePerformanceMode);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
         
         // Request initial performance mode (via Tauri or browser)
         if (window.nizhal?.system?.getPerformanceMode) {
@@ -448,9 +492,9 @@ const OptimizedVRMAvatar = React.memo(({
             }).catch(() => {});
         }
 
-
         return () => {
             window.removeEventListener('message', handlePerformanceMode);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
     }, []);
 
@@ -472,7 +516,7 @@ const OptimizedVRMAvatar = React.memo(({
 
     // Adaptive frame loop based on performance
     const frameLoop = useMemo(() => {
-        return currentPerformanceMode === 'low' ? 'demand' : 'always';
+        return (currentPerformanceMode === 'low' || currentPerformanceMode === 'minimal') ? 'demand' : 'always';
     }, [currentPerformanceMode]);
 
     const handleLoad = useCallback((vrm) => {
@@ -498,7 +542,7 @@ const OptimizedVRMAvatar = React.memo(({
                 }}
                 style={{ background: 'transparent' }}
                 frameloop={frameLoop}
-                performance={{ min: 0.5, max: currentPerformanceMode === 'low' ? 30 : 60 }} // FPS limits
+                performance={{ min: 0.1, max: currentPerformanceMode === 'minimal' ? 1 : currentPerformanceMode === 'low' ? 30 : 60 }} // FPS limits
             >
                 {/* Simplified lighting for low-end devices */}
                 {currentPerformanceMode === 'low' ? (
@@ -517,7 +561,7 @@ const OptimizedVRMAvatar = React.memo(({
                 <OptimizedVRMModel
                     key={modelUrl}
                     url={modelUrl}
-                    scale={1}
+                    scale={0.85}
                     expression={expression}
                     isSpeaking={isSpeaking}
                     onLoad={handleLoad}

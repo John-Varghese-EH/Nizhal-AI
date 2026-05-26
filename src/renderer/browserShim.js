@@ -123,6 +123,10 @@ function createMockAPI() {
             getEphemeralToken: async () => ({ success: true, token: getPrefs().geminiApiKey }),
             clearContext: async () => localStorage.removeItem('nizhal_context'),
             checkLocalAI: async () => false,
+            detectGpu: async () => ({ device: "CPU (Mock Browser)", backend: "CPU" }),
+            localModelStatus: async () => ({ is_downloaded: false, download_progress: 0.0 }),
+            localModelDownload: async () => {},
+            localModelLoad: async () => {},
         },
         voice: {
             speak: async (text) => {

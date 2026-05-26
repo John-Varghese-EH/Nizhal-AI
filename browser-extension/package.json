@@ -1,0 +1,28 @@
+{
+  "name": "nizhal-browser-extension",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Official browser extension for Nizhal AI — connects to the local desktop companion via WebSocket",
+  "scripts": {
+    "dev": "vite build --watch --mode development",
+    "build": "vite build",
+    "build:chrome": "BROWSER_TARGET=chrome vite build",
+    "build:firefox": "BROWSER_TARGET=firefox vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.13",
+    "webextension-polyfill": "^0.12.0",
+    "lucide-react": "^0.562.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@types/webextension-polyfill": "^0.12.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.6"
+  }
+}

@@ -1,18 +1,31 @@
 /**
- * ThemeService - Application theming
- * 
- * Manages app themes with color schemes and presets.
+ * ThemeService.js
+ *
+ * Manages application themes and accent palettes, dynamically applying configurations to
+ * browser CSS properties while ensuring absolute compatibility with headless/SSR contexts.
  */
 
-class ThemeService {
+export class ThemeService {
     constructor() {
         this.currentTheme = 'dark';
         this.accentColor = 'cyan';
-        this.initialized = false;
+        this.isInitialized = false;
+
+        this.status = 'uninitialized';
+        this.health = {
+            status: 'uninitialized',
+            lastError: null
+        };
     }
 
-    async initialize() {
-        if (this.initialized) return;
+    /**
+     * Initializes theme configurations from stored properties.
+     */
+    async init() {
+        if (this.isInitialized) return { success: true };
+
+        this.status = 'initializing';
+        this.health.status = 'initializing';
 
         try {
             const stored = await this._loadFromStorage();
@@ -21,16 +34,30 @@ class ThemeService {
                 this.accentColor = stored.accent || 'cyan';
             }
             this._applyTheme();
-            this.initialized = true;
-            console.log('[Theme] Initialized:', this.currentTheme, this.accentColor);
+
+            this.isInitialized = true;
+            this.status = 'ready';
+            this.health.status = 'ready';
+            this.health.lastError = null;
+
+            console.log('[ThemeService] Theme initialized:', this.currentTheme, this.accentColor);
+            return { success: true };
         } catch (error) {
-            console.error('[Theme] Init error:', error);
+            this.status = 'failed';
+            this.health.status = 'failed';
+            this.health.lastError = error.message;
+            console.error('[ThemeService] Theme initialization failure:', error);
+            return { success: false, error: error.message };
         }
     }
 
     /**
-     * Get available themes
+     * Compatibility bridge for legacy callers.
      */
+    async initialize() {
+        return this.init();
+    }
+
     getThemes() {
         return [
             {
@@ -91,9 +118,6 @@ class ThemeService {
         ];
     }
 
-    /**
-     * Get accent colors
-     */
     getAccentColors() {
         return [
             { id: 'cyan', name: 'Cyan', color: '#06b6d4', glow: 'rgba(6,182,212,0.3)' },
@@ -107,9 +131,6 @@ class ThemeService {
         ];
     }
 
-    /**
-     * Set theme
-     */
     async setTheme(themeId) {
         const theme = this.getThemes().find(t => t.id === themeId);
         if (theme) {
@@ -119,9 +140,6 @@ class ThemeService {
         }
     }
 
-    /**
-     * Set accent color
-     */
     async setAccentColor(colorId) {
         const color = this.getAccentColors().find(c => c.id === colorId);
         if (color) {
@@ -131,32 +149,28 @@ class ThemeService {
         }
     }
 
-    /**
-     * Get current theme
-     */
     getCurrentTheme() {
         return this.getThemes().find(t => t.id === this.currentTheme);
     }
 
-    /**
-     * Get current accent
-     */
     getCurrentAccent() {
         return this.getAccentColors().find(c => c.id === this.accentColor);
     }
 
     /**
-     * Apply theme to document
+     * Applies theme variables to the document documentElement, checking bounds carefully.
      */
     _applyTheme() {
+        if (typeof document === 'undefined') return;
+
         const theme = this.getCurrentTheme();
         const accent = this.getCurrentAccent();
 
         if (!theme || !accent) return;
 
         const root = document.documentElement;
+        if (!root) return;
 
-        // Set CSS variables
         root.style.setProperty('--theme-bg', theme.colors.bg);
         root.style.setProperty('--theme-surface', theme.colors.surface);
         root.style.setProperty('--theme-text', theme.colors.text);
@@ -165,9 +179,6 @@ class ThemeService {
         root.style.setProperty('--accent-glow', accent.glow);
     }
 
-    /**
-     * Get CSS class for theme
-     */
     getThemeClass() {
         return `theme-${this.currentTheme} accent-${this.accentColor}`;
     }
@@ -179,7 +190,7 @@ class ThemeService {
                 return prefs?.theme || {};
             }
             return {};
-        } catch {
+        } catch (e) {
             return {};
         }
     }
@@ -197,10 +208,34 @@ class ThemeService {
                 });
             }
         } catch (error) {
-            console.error('[Theme] Save error:', error);
+            console.error('[ThemeService] Failed to save theme variables:', error);
         }
+    }
+
+    /**
+     * Resets service parameters to default dark configurations.
+     */
+    async reset() {
+        this.currentTheme = 'dark';
+        this.accentColor = 'cyan';
+        this._applyTheme();
+        await this._saveToStorage();
+        return { success: true };
+    }
+
+    /**
+     * Returns a snapshot of the current configuration.
+     */
+    getState() {
+        return {
+            initialized: this.isInitialized,
+            status: this.status,
+            theme: this.currentTheme,
+            accent: this.accentColor,
+            health: { ...this.health }
+        };
     }
 }
 
 export const themeService = new ThemeService();
-export default ThemeService;
+export default themeService;

@@ -1,6 +1,8 @@
 mod commands;
+mod local_inference;
 
-use commands::{ai, env_mgmt, livekit, memory, persona, settings, system, window_mgmt};
+use commands::{ai, env_mgmt, gateway, keyring, livekit, memory, persona, settings, system, window_mgmt, ws_bridge, validation};
+use std::sync::{Arc, Mutex};
 use tauri::{Manager, Emitter};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -32,8 +34,18 @@ pub fn run() {
         );
     }
 
+    // Initialize AI Gateway state (local inference engine + model manager)
+    let candle_engine = local_inference::candle_engine::CandleEngine::new();
+    let model_manager = local_inference::model_manager::ModelManager::new();
+    let gateway_state = gateway::AIGatewayState {
+        engine: Arc::new(Mutex::new(candle_engine)),
+        model_manager: Arc::new(model_manager),
+    };
+
     builder
         .manage(system::AppState::new())
+        .manage(gateway_state)
+        .manage(window_mgmt::WindowService::new())
         .invoke_handler(tauri::generate_handler![
             // AI commands (cross-platform)
             ai::chat,
@@ -45,6 +57,20 @@ pub fn run() {
             ai::set_model,
             ai::get_ephemeral_token,
             ai::clear_context,
+            // Keyring commands (secure credential storage)
+            keyring::keyring_save_key,
+            keyring::keyring_get_key,
+            keyring::keyring_delete_key,
+            keyring::keyring_has_key,
+            keyring::keyring_status,
+            keyring::keyring_migrate_from_store,
+            // AI Gateway commands (hybrid local/cloud routing)
+            gateway::detect_gpu,
+            gateway::local_model_status,
+            gateway::local_model_download,
+            gateway::local_model_load,
+            gateway::local_chat,
+            gateway::gateway_chat,
             // Settings commands (cross-platform)
             settings::get_settings,
             settings::save_settings,
@@ -54,6 +80,8 @@ pub fn run() {
             settings::reset_settings,
             settings::export_settings,
             settings::import_settings,
+            // Validation commands
+            validation::validate_provider_api_key,
             // System commands (cross-platform)
             system::get_system_info,
             system::get_system_stats,
@@ -61,6 +89,9 @@ pub fn run() {
             system::open_external_url,
             system::get_app_version,
             system::get_app_theme,
+            system::check_xdg_portal,
+            system::open_system_permission_settings,
+            system::check_pipewire_status,
             // Persona commands (cross-platform)
             persona::get_active_persona,
             persona::set_active_persona,
@@ -108,6 +139,11 @@ pub fn run() {
             livekit::livekit_get_status,
             livekit::livekit_start_agent,
             livekit::livekit_stop_agent,
+            // WebSocket bridge for browser extension
+            ws_bridge::start_ws_bridge,
+            ws_bridge::stop_ws_bridge,
+            ws_bridge::ws_bridge_status,
+            ws_bridge::ws_bridge_emit,
         ])
         .setup(|app| {
             // Desktop-only initialization
@@ -216,6 +252,7 @@ pub fn run() {
                                     }
                                 }
                                 "quit" => {
+                                    livekit::cleanup_livekit_agent();
                                     std::process::exit(0);
                                 }
                                 _ => {}
@@ -232,6 +269,15 @@ pub fn run() {
                 // Mobile overlay service will be initialized from the frontend
                 // via PlatformBridge.js → native Kotlin/Swift bridge
             }
+
+            // Auto-start the WebSocket bridge for the browser extension
+            let _handle_for_ws = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                match ws_bridge::start_ws_bridge(Some(9721)).await {
+                    Ok(port) => log::info!("[Setup] WS Bridge auto-started on port {}", port),
+                    Err(e) => log::error!("[Setup] WS Bridge failed to start: {}", e),
+                }
+            });
 
             Ok(())
         })

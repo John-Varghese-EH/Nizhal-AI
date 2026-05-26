@@ -75,7 +75,11 @@ class ScreenCaptureService {
     async _browserCapture() {
         try {
             const stream = await navigator.mediaDevices.getDisplayMedia({
-                video: { mediaSource: 'screen' }
+                video: {
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
+                    frameRate: { ideal: 30 }
+                }
             });
 
             const video = document.createElement('video');

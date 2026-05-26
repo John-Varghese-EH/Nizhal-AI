@@ -103,12 +103,13 @@ export class CollaborationService {
             
             const config = { ...this.sessionConfig, ...options };
             
-            // Get screen stream
             this.screenStream = await navigator.mediaDevices.getDisplayMedia({
                 video: {
                     cursor: 'always',
                     displaySurface: 'monitor',
-                    frameRate: { ideal: config.frameRate }
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
+                    frameRate: { ideal: config.frameRate || 30 }
                 },
                 audio: config.audioEnabled
             });

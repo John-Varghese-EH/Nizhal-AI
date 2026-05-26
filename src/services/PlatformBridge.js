@@ -52,7 +52,21 @@ async function fetchDeviceTier() {
 
     // Take the lower of the two (bottleneck determines tier)
     const tierOrder = { low: 0, medium: 1, high: 2 };
-    const effectiveTier = tierOrder[webglTier] <= tierOrder[systemTier] ? webglTier : systemTier;
+    let effectiveTier = tierOrder[webglTier] <= tierOrder[systemTier] ? webglTier : systemTier;
+
+    // Desktop override: on desktop, if WebGL is supported, always default to at least 'medium' to enable 3D
+    if (_platformInfo?.is_desktop && effectiveTier === 'low') {
+        try {
+            const canvas = document.createElement('canvas');
+            const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+            if (gl) {
+                effectiveTier = 'medium';
+                console.log('[PlatformBridge] Desktop override: elevating performance tier to medium to support 3D rendering');
+            }
+        } catch (e) {
+            console.warn('[PlatformBridge] Desktop override check failed:', e);
+        }
+    }
 
     _deviceTier = effectiveTier;
     return _deviceTier;
@@ -124,9 +138,29 @@ export const Platform = {
      * Initialize platform detection (call once on app boot)
      */
     async init() {
-        await fetchPlatformInfo();
-        await fetchDeviceTier();
-        console.log(`[PlatformBridge] Platform: ${_platformInfo.platform}, Tier: ${_deviceTier}, Mobile: ${_platformInfo.is_mobile}`);
+        try {
+            await fetchPlatformInfo();
+            await fetchDeviceTier();
+            console.log(`[PlatformBridge] Platform: ${_platformInfo.platform}, Tier: ${_deviceTier}, Mobile: ${_platformInfo.is_mobile}`);
+        } catch (error) {
+            console.error('[PlatformBridge] Initialization failed:', error);
+        }
+    },
+
+    /**
+     * Return standard health status (READY, INITIALIZING, ERROR)
+     */
+    status() {
+        return _platformInfo ? 'READY' : 'INITIALIZING';
+    },
+
+    /**
+     * Standard cleanup releasing cached platform assets
+     */
+    dispose() {
+        _platformInfo = null;
+        _deviceTier = null;
+        console.log('[PlatformBridge] Disposed and cached parameters cleared.');
     },
 
     // --- Platform checks ---

@@ -38,6 +38,32 @@ class NizhalAssistant {
             console.error('❌ Failed to start Nizhal Assistant:', error);
         }
     }
+
+    /**
+     * Stop the assistant services
+     */
+    async stop() {
+        try {
+            console.log('🛑 Stopping Nizhal Assistant Services...');
+            if (this.roomManager?.disconnect) {
+                await this.roomManager.disconnect();
+            }
+            if (this.adbManager?.disconnect) {
+                this.adbManager.disconnect();
+            }
+            console.log('✅ Nizhal Assistant Stopped');
+        } catch (error) {
+            console.error('❌ Failed to stop Nizhal Assistant:', error);
+        }
+    }
+
+    /**
+     * Reset the assistant services
+     */
+    async reset() {
+        await this.stop();
+        await this.start();
+    }
 }
 
 export const assistant = new NizhalAssistant();

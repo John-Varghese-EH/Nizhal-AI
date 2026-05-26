@@ -14,6 +14,7 @@ import ShareCard from '../components/ShareCard';
 import SettingsView from '../components/SettingsView';
 import TicTacToe from '../components/TicTacToe';
 import MobileAvatar2D from '../components/avatar/MobileAvatar2D';
+import AvatarWindow from '../../components/AvatarWindow';
 import { Platform } from '../../services/PlatformBridge';
 
 import { useTheme } from '../hooks/useTheme';
@@ -142,14 +143,8 @@ const CharacterApp = () => {
     // In-canvas character position (pixels offset from center)
     const [characterPosition, setCharacterPosition] = useState({ x: 0, y: 0 });
     const [localScaleOffset, setLocalScaleOffset] = useState(1.0);
-    const tiltOptions = [
-        { y: 0.5, z: 3.5, fov: 35 },     // Straight on (default)
-        { y: 1.5, z: 3.0, fov: 40 },     // Tilted down slightly (standing over)
-        { y: 2.5, z: 2.5, fov: 45 },     // Tilted down more
-        { y: -0.2, z: 3.5, fov: 35 }     // Tilted up (looking from below)
-    ];
-    const [localTiltIdx, setLocalTiltIdx] = useState(0);
     const previousWindowSize = useRef(null);
+    const isPositionInitialized = useRef(false);
 
     const dragStartPos = useRef({ x: 0, y: 0 });
     const dragStartCharPos = useRef({ x: 0, y: 0 });
@@ -228,6 +223,11 @@ const CharacterApp = () => {
         [settings.character]
     );
 
+    // Reset loaded state when character model changes to guarantee smooth transitions
+    useEffect(() => {
+        setVrmLoaded(false);
+    }, [currentCharacter.model]);
+
     // Initial load of settings from unified state and local storage
     useEffect(() => {
         const loadSettings = async () => {
@@ -293,11 +293,23 @@ const CharacterApp = () => {
             }
         });
 
+        const mapEmotionToState = (emotion) => {
+            const emotionStateMap = {
+                happy: AvatarState.HAPPY,
+                sad: AvatarState.SAD,
+                excited: AvatarState.EXCITED,
+                thinking: AvatarState.THINKING,
+                neutral: AvatarState.IDLE
+            };
+            return emotionStateMap[emotion] || AvatarState.IDLE;
+        };
+
         // Subscribe to emotion changes for animations
         const unsubEmotion = window.nizhal?.state?.onEmotionChange?.((data) => {
             setCurrentEmotion(data.emotion);
             // Trigger expression animation
             expressionRef.current?.onEvent(data.emotion);
+            getAvatarStateController().setState(mapEmotionToState(data.emotion));
         });
 
         // Subscribe to direct VRM model changes (faster than state sync)
@@ -311,6 +323,7 @@ const CharacterApp = () => {
             const emotion = e.detail;
             setCurrentEmotion(emotion);
             expressionRef.current?.onEvent(emotion);
+            getAvatarStateController().setState(mapEmotionToState(emotion));
         };
         window.addEventListener('nizhal-emotion', handleLocalEmotion);
 
@@ -329,6 +342,13 @@ const CharacterApp = () => {
             const h = window.innerHeight;
             if (w > 0 && h > 0) {
                 setWindowSize({ width: w, height: h });
+                if (!isPositionInitialized.current && w > 100 && h > 100) {
+                    isPositionInitialized.current = true;
+                    // Place avatar at bottom-right by default
+                    const defaultX = (w / 2) - 210; 
+                    const defaultY = (h / 2) - 280; 
+                    setCharacterPosition({ x: defaultX, y: defaultY });
+                }
                 // Mark window as ready once we have valid dimensions
                 if (!windowReady && w > 100 && h > 100) {
                     setWindowReady(true);
@@ -356,6 +376,32 @@ const CharacterApp = () => {
             window.removeEventListener('resize', updateSize);
         };
     }, [windowReady]);
+
+    // Auto-clamp character position when window size or scale changes to prevent it from going off-screen
+    useEffect(() => {
+        const sWidth = windowSize.width || window.innerWidth;
+        const sHeight = windowSize.height || window.innerHeight;
+        if (sWidth <= 0 || sHeight <= 0) return;
+
+        const canvasWidth = 420 * localScaleOffset;
+        const canvasHeight = 560 * localScaleOffset;
+
+        const minX = -sWidth / 2 + 30 * localScaleOffset;
+        const maxX = sWidth / 2 - 30 * localScaleOffset;
+
+        const minY = -sHeight / 2 + 50 * localScaleOffset;
+        const maxY = sHeight / 2 - 50 * localScaleOffset;
+
+        setCharacterPosition(prev => {
+            const newX = Math.max(minX, Math.min(maxX, prev.x));
+            const newY = Math.max(minY, Math.min(maxY, prev.y));
+            if (newX !== prev.x || newY !== prev.y) {
+                console.log(`[CharacterApp] Window resized/scaled. Clamping position from {x: ${prev.x}, y: ${prev.y}} to {x: ${newX}, y: ${newY}}`);
+                return { x: newX, y: newY };
+            }
+            return prev;
+        });
+    }, [windowSize, localScaleOffset]);
 
     // Calculate VRM scale and position based on window size
     const vrmConfig = useMemo(() => {
@@ -610,9 +656,21 @@ const CharacterApp = () => {
     // IPC listeners
     useEffect(() => {
         const handleAvatarState = (data) => {
-            setAvatarState(prev => ({ ...prev, ...data }));
-            if (data.isThinking) expressionRef.current?.onEvent('thinking');
-            if (data.isSpeaking) expressionRef.current?.onEvent('speaking');
+            setAvatarState(prev => {
+                const nextState = { ...prev, ...data };
+                if (data.isThinking) {
+                    expressionRef.current?.onEvent('thinking');
+                    getAvatarStateController().setState(AvatarState.THINKING);
+                } else if (data.isSpeaking) {
+                    expressionRef.current?.onEvent('speaking');
+                    getAvatarStateController().setState(AvatarState.SPEAKING);
+                } else if (data.isThinking === false || data.isSpeaking === false) {
+                    if (!nextState.isThinking && !nextState.isSpeaking) {
+                        getAvatarStateController().setState(AvatarState.IDLE);
+                    }
+                }
+                return nextState;
+            });
         };
 
         const handleCharacterChange = (charId) => {
@@ -630,16 +688,40 @@ const CharacterApp = () => {
             handleGameToggle(enable);
         };
 
+        const handleResetTransform = () => {
+            console.log('[CharacterApp] Reset character transform event received');
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            if (w > 0 && h > 0) {
+                const defaultX = (w / 2) - 210; 
+                const defaultY = (h / 2) - 280; 
+                setCharacterPosition({ x: defaultX, y: defaultY });
+            }
+        };
+
+        const handleAvatarSpeak = (payload) => {
+            const text = typeof payload === 'string' ? payload : (payload?.text || payload?.message || '');
+            if (text) {
+                setSpeechMessage(text);
+                setSpeechVariant(payload?.variant || 'default');
+                setIsSpeechVisible(true);
+            }
+        };
+
         window.nizhal?.on?.('avatar:state', handleAvatarState);
         window.nizhal?.on?.('avatar:persona', handleCharacterChange);
+        window.nizhal?.on?.('avatar:speak', handleAvatarSpeak);
         window.nizhal?.on?.('character:interactionToggle', handleInteractionToggle);
         window.nizhal?.on?.('game:toggle', handleGameToggleRequest);
+        window.nizhal?.on?.('reset-character-transform', handleResetTransform);
 
         return () => {
             window.nizhal?.off?.('avatar:state', handleAvatarState);
             window.nizhal?.off?.('avatar:persona', handleCharacterChange);
+            window.nizhal?.off?.('avatar:speak', handleAvatarSpeak);
             window.nizhal?.off?.('character:interactionToggle', handleInteractionToggle);
             window.nizhal?.off?.('game:toggle', handleGameToggleRequest);
+            window.nizhal?.off?.('reset-character-transform', handleResetTransform);
         };
     }, [handleGameToggle]);
 
@@ -672,12 +754,12 @@ const CharacterApp = () => {
     const handleAvatarClick = useCallback(() => {
         if (isScreensaver) {
             // Wake up if clicked in screensaver
-            window.nizhal?.invoke?.('window:showChat'); // Or just wake up
+            window.nizhal?.invoke?.('show_chat_window'); // Or just wake up
             // Main process should handle the click and restore too?
             // Actually the click might not propagate if window is clickthrough but we enable interaction?
             // For now, assume it works.
         } else {
-            window.nizhal?.invoke?.('window:showChat');
+            window.nizhal?.invoke?.('show_chat_window');
         }
     }, [isScreensaver]);
 
@@ -735,11 +817,27 @@ const CharacterApp = () => {
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
         const deltaX = clientX - dragStartPos.current.x;
         const deltaY = clientY - dragStartPos.current.y;
+
+        const sWidth = windowSize.width || window.innerWidth;
+        const sHeight = windowSize.height || window.innerHeight;
+
+        const targetX = dragStartCharPos.current.x + deltaX;
+        const targetY = dragStartCharPos.current.y + deltaY;
+
+        // Keep 3D canvas strictly contained within the window viewport,
+        // allowing transparent margins to overflow just enough for visible model borders to reach screen limits.
+        const minX = -sWidth / 2 + 30 * localScaleOffset;
+        const maxX = sWidth / 2 - 30 * localScaleOffset;
+
+        // Vertically clamp to keep character grounded, allowing transparent padding to overflow just enough for head/feet to touch screen borders
+        const minY = -sHeight / 2 + 50 * localScaleOffset; // Allow top of canvas to go off-screen so head can touch top border
+        const maxY = sHeight / 2 - 50 * localScaleOffset; // Allow bottom of canvas to go off-screen so feet can touch bottom border
+
         setCharacterPosition({
-            x: dragStartCharPos.current.x + deltaX,
-            y: dragStartCharPos.current.y + deltaY
+            x: Math.max(minX, Math.min(maxX, targetX)),
+            y: Math.max(minY, Math.min(maxY, targetY))
         });
-    }, [isDragging]);
+    }, [isDragging, windowSize, localScaleOffset]);
 
     const handleDragEnd = useCallback(() => {
         if (!isDragging) return;
@@ -803,21 +901,21 @@ const CharacterApp = () => {
     }, []);
 
     const toggleAlwaysOnTop = useCallback(async () => {
-        const result = await window.nizhal?.invoke?.('character:toggleAlwaysOnTop');
+        const result = await window.nizhal?.invoke?.('toggle_character_always_on_top');
         setSettings(prev => ({ ...prev, alwaysOnTop: result ?? !prev.alwaysOnTop }));
     }, []);
 
     // Menu actions
     const menuActions = {
-        showChat: () => window.nizhal?.invoke?.('window:showChat'),
+        showChat: () => window.nizhal?.invoke?.('show_chat_window'),
         toggleAlwaysOnTop,
         toggleDance,
         toggleGravity,
-        jump: () => window.nizhal?.invoke?.('character:jump'),
-        snapTopRight: () => window.nizhal?.invoke?.('character:snap', 'top-right'),
-        snapBottomRight: () => window.nizhal?.invoke?.('character:snap', 'bottom-right'),
-        snapBottomLeft: () => window.nizhal?.invoke?.('character:snap', 'bottom-left'),
-        hide: () => window.nizhal?.invoke?.('character:hide'),
+        jump: () => {},
+        snapTopRight: () => window.nizhal?.invoke?.('snap_character', { position: 'top-right' }),
+        snapBottomRight: () => window.nizhal?.invoke?.('snap_character', { position: 'bottom-right' }),
+        snapBottomLeft: () => window.nizhal?.invoke?.('snap_character', { position: 'bottom-left' }),
+        hide: () => window.nizhal?.invoke?.('hide_character_window'),
         customize: () => setCustomizerOpen(true)
     };
 
@@ -892,18 +990,7 @@ const CharacterApp = () => {
     // Prevent rendering until window size is detected to avoid "small top-left" glitch
     if (!windowReady) return null;
 
-    const currentTilt = tiltOptions[localTiltIdx];
 
-    const activeVrmConfig = isGameActive ? {
-        ...vrmConfig,
-        position: [vrmConfig.position[0], vrmConfig.position[1] - 0.5, vrmConfig.position[2] - 1], // Push back and down
-        scale: vrmConfig.scale * 0.8 * (uiSettings.characterScale ?? settings.scale ?? 1.0) * localScaleOffset,
-        cameraPosition: [vrmConfig.cameraPosition[0], currentTilt.y, currentTilt.z]
-    } : {
-        ...vrmConfig,
-        scale: vrmConfig.scale * dynamicIdleScale * (uiSettings.characterScale ?? settings.scale ?? 1.0) * localScaleOffset,
-        cameraPosition: [vrmConfig.cameraPosition[0], currentTilt.y, currentTilt.z]
-    };
 
     return (
         <>
@@ -926,7 +1013,7 @@ const CharacterApp = () => {
 
             <div
                 className={`w-screen h-screen overflow-hidden select-none transition-opacity duration-300 ${isClickThrough && !isGameActive ? 'pointer-events-none' : 'pointer-events-auto'}`}
-                style={{ opacity: (vrmLoaded) ? (uiSettings.transparency ?? settings.characterOpacity ?? settings.opacity ?? 0.95) : 0 }}
+                style={{ opacity: (!shouldUse3D || vrmLoaded || currentCharacter.type === 'hologram') ? (uiSettings.transparency ?? settings.characterOpacity ?? settings.opacity ?? 0.95) : 0 }}
             >
                 <AnimatePresence>
                     {isGameActive && (
@@ -943,15 +1030,7 @@ const CharacterApp = () => {
                     )}
                 </AnimatePresence>
 
-                <SpeechBubble
-                    message={speechMessage}
-                    variant={speechVariant}
-                    isVisible={isSpeechVisible}
-                    onClose={() => setIsSpeechVisible(false)}
-                    position={characterPosition}
-                    windowSize={windowSize}
-                    avatarScale={localScaleOffset}
-                />
+                {/* SpeechBubble moved inside dynamic avatar model container below for perfect sticky & adaptive positioning */}
 
                 {/* Alt-Key Interactive UI Controls */}
                 <AnimatePresence>
@@ -978,15 +1057,7 @@ const CharacterApp = () => {
                                     >
                                         Resize
                                     </button>
-                                    <button 
-                                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-medium transition-colors border border-slate-600 focus:outline-none"
-                                        onClick={(e) => { 
-                                            e.stopPropagation(); 
-                                            setLocalTiltIdx((prev) => (prev + 1) % tiltOptions.length);
-                                        }}
-                                    >
-                                        Tilt Layout
-                                    </button>
+
                                 </div>
                                 <div className="flex gap-2 mt-2">
                                     <button 
@@ -1043,89 +1114,34 @@ const CharacterApp = () => {
                         </div>
                     )}
 
-                    {/* HIGH/MEDIUM TIER: Full 3D Canvas with VRM */}
-                    {shouldUse3D && Canvas && (
-                        <Canvas
-                            shadows={deviceTier === 'high'}
-                            dpr={deviceTier === 'high' ? [1.5, 2] : [1, 1.5]}
-                            camera={{
-                                position: activeVrmConfig.cameraPosition,
-                                fov: currentTilt.fov,
-                                near: 0.1,
-                                far: 100
-                            }}
-                            gl={{
-                                alpha: true,
-                                antialias: deviceTier === 'high',
-                                preserveDrawingBuffer: true,
-                                powerPreference: deviceTier === 'high' ? 'high-performance' : 'default'
-                            }}
+                    {/* HIGH/MEDIUM TIER: Robust Hardened Three.js VRM Viewport */}
+                    {shouldUse3D && (
+                        <div 
                             className="block"
                             style={{
-                                width: windowSize.width,
-                                height: windowSize.height,
-                                pointerEvents: 'none',
+                                width: 420 * localScaleOffset,
+                                height: 560 * localScaleOffset,
+                                pointerEvents: 'auto',
                                 position: 'absolute',
-                                top: 0,
-                                left: 0
+                                top: '50%',
+                                left: '50%',
+                                transform: `translate(calc(-50% + ${characterPosition.x}px), calc(-50% + ${characterPosition.y}px))`
                             }}
                         >
-                            {/* Lighting adjusted per tier */}
-                            <ambientLight intensity={1.2} />
-                            <directionalLight position={[0, 5, 5]} intensity={1.5} />
-                            {deviceTier === 'high' && (
-                                <>
-                                    <pointLight position={[10, 10, 10]} intensity={1.5} />
-                                    <pointLight position={[-10, 5, 5]} intensity={0.8} />
-                                </>
-                            )}
-
-                            {currentCharacter.type === 'hologram' ? (
-                                <Suspense fallback={null}>
-                                    <JarvisHologram
-                                        state={avatarState.isSpeaking ? 'speaking' : avatarState.isThinking ? 'thinking' : avatarState.isListening ? 'listening' : 'idle'}
-                                        mood="neutral"
-                                        size="large"
-                                    />
-                                </Suspense>
-                            ) : (
-                                <Suspense fallback={null}>
-                                    {windowReady && (
-                                        <OptimizedVRMModel
-                                            key={currentCharacter.id}
-                                            url={currentCharacter.model}
-                                            scale={activeVrmConfig.scale}
-                                            position={activeVrmConfig.position}
-                                            dragOffset={[
-                                                characterPosition.x / (windowSize.width / 6),
-                                                -characterPosition.y / (windowSize.height / 4),
-                                            ]}
-                                            isSpeaking={avatarState.isSpeaking}
-                                            expression={currentEmotion === 'thinking' ? 'thinking' : currentEmotion}
-                                            enableLookAt={settings.mouseTracking}
-                                            enableBlink={true}
-                                            onHoverIn={() => {
-                                                window.nizhal?.character?.setClickThrough?.(false);
-                                                setIsClickThrough(false);
-                                            }}
-                                            onHoverOut={() => {
-                                                window.nizhal?.character?.setClickThrough?.(true);
-                                                setIsClickThrough(true);
-                                            }}
-                                            onLoad={() => {
-                                                console.log('VRM loaded successfully:', currentCharacter.name);
-                                                setVrmLoaded(true);
-                                            }}
-                                            onError={(err) => {
-                                                console.error('VRM failed to load:', currentCharacter.model, err);
-                                                // Fallback to 2D on VRM load failure
-                                                if (isMobile) setDeviceTier('low');
-                                            }}
-                                        />
-                                    )}
-                                </Suspense>
-                            )}
-                        </Canvas>
+                            <AvatarWindow
+                                modelUrl={currentCharacter.model}
+                                expression={currentEmotion === 'thinking' ? 'thinking' : currentEmotion}
+                                isSpeaking={avatarState.isSpeaking}
+                                onLoad={() => setVrmLoaded(true)}
+                            />
+                            <SpeechBubble
+                                message={speechMessage}
+                                variant={speechVariant}
+                                isVisible={isSpeechVisible}
+                                onClose={() => setIsSpeechVisible(false)}
+                                scale={localScaleOffset}
+                            />
+                        </div>
                     )}
 
                     {/* Dance indicator */}

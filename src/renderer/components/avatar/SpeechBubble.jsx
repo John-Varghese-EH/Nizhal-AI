@@ -1,9 +1,122 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useLayoutEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const SpeechBubble = ({ message, isVisible, onClose, duration = 5000, variant = 'default', position = { x: 0, y: 0 }, avatarScale = 1.0, windowSize = { width: typeof window !== 'undefined' ? window.innerWidth : 1920, height: typeof window !== 'undefined' ? window.innerHeight : 1080 } }) => {
+/**
+ * SpeechBubble - Dynamic, adaptive dialogue bubble for VRM character companion.
+ * Auto-detects available viewport space to position itself close to the model (above, left, right, below).
+ * Actively clamps screen coordinates so it never overflows viewport boundaries.
+ */
+const SpeechBubble = ({
+    message,
+    isVisible,
+    onClose,
+    duration = 5000,
+    variant = 'default',
+    customPlacement = null,
+    scale = 1.0
+}) => {
     const [displayedText, setDisplayedText] = useState('');
     const [isTyping, setIsTyping] = useState(false);
+    const [placement, setPlacement] = useState('above');
+    const [screenShift, setScreenShift] = useState({ x: 0, y: 0 });
+    const bubbleRef = useRef(null);
+
+    const prevPlacementRef = useRef('above');
+    const prevShiftRef = useRef({ x: 0, y: 0 });
+
+    // Dynamic placement & viewport boundary clamping logic
+    const updatePlacement = () => {
+        if (customPlacement) {
+            if (placement !== customPlacement) {
+                setPlacement(customPlacement);
+                prevPlacementRef.current = customPlacement;
+            }
+            return;
+        }
+
+        const bubbleEl = bubbleRef.current;
+        if (!bubbleEl) return;
+
+        const parent = bubbleEl.parentElement;
+        if (!parent) return;
+
+        const rect = parent.getBoundingClientRect();
+
+        const spaceAbove = rect.top;
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const spaceLeft = rect.left;
+        const spaceRight = window.innerWidth - rect.right;
+
+        // Choose main placement based on available space
+        let newPlacement = 'above';
+        if (spaceAbove > 120) {
+            newPlacement = 'above';
+        } else if (spaceRight > 240) {
+            newPlacement = 'right';
+        } else if (spaceLeft > 240) {
+            newPlacement = 'left';
+        } else {
+            newPlacement = 'below';
+        }
+
+        if (prevPlacementRef.current !== newPlacement) {
+            prevPlacementRef.current = newPlacement;
+            setPlacement(newPlacement);
+        }
+
+        // Calculate fine shift adjustments to prevent screen overflow
+        const bubbleRect = bubbleEl.getBoundingClientRect();
+        if (bubbleRect.width === 0) return; // Wait for layout
+
+        let shiftX = 0;
+        let shiftY = 0;
+        const padding = 12; // margin from screen boundaries
+
+        // Horizontal overflow checks
+        if (bubbleRect.left < padding) {
+            shiftX = padding - bubbleRect.left;
+        } else if (bubbleRect.right > window.innerWidth - padding) {
+            shiftX = (window.innerWidth - padding) - bubbleRect.right;
+        }
+
+        // Vertical overflow checks
+        if (bubbleRect.top < padding) {
+            shiftY = padding - bubbleRect.top;
+        } else if (bubbleRect.bottom > window.innerHeight - padding) {
+            shiftY = (window.innerHeight - padding) - bubbleRect.bottom;
+        }
+
+        // Only trigger state updates if shift delta changes to prevent cascades
+        if (Math.abs(prevShiftRef.current.x - shiftX) > 0.5 || Math.abs(prevShiftRef.current.y - shiftY) > 0.5) {
+            prevShiftRef.current = { x: shiftX, y: shiftY };
+            setScreenShift({ x: shiftX, y: shiftY });
+        }
+    };
+
+    useLayoutEffect(() => {
+        if (isVisible) {
+            updatePlacement();
+
+            // Bind resize and scroll listeners
+            window.addEventListener('resize', updatePlacement);
+            window.addEventListener('scroll', updatePlacement, true);
+
+            // 60fps animation frame loop for fluid boundary shifts during active dragging
+            let active = true;
+            const tick = () => {
+                if (!active) return;
+                updatePlacement();
+                requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+
+            return () => {
+                active = false;
+                window.removeEventListener('resize', updatePlacement);
+                window.removeEventListener('scroll', updatePlacement, true);
+            };
+        }
+    }, [isVisible, customPlacement, message]);
 
     // Typing animation effect
     useEffect(() => {
@@ -11,7 +124,7 @@ const SpeechBubble = ({ message, isVisible, onClose, duration = 5000, variant = 
             setDisplayedText('');
             setIsTyping(true);
             let i = 0;
-            const typingSpeed = 30; // ms per character
+            const typingSpeed = 25; // ms per char
 
             const typeInterval = setInterval(() => {
                 if (i < message.length) {
@@ -27,7 +140,7 @@ const SpeechBubble = ({ message, isVisible, onClose, duration = 5000, variant = 
         }
     }, [isVisible, message]);
 
-    // Auto-hide after typing completes
+    // Auto-close overlay timer
     useEffect(() => {
         if (isVisible && !isTyping && displayedText && duration > 0) {
             const timer = setTimeout(onClose, duration);
@@ -35,79 +148,154 @@ const SpeechBubble = ({ message, isVisible, onClose, duration = 5000, variant = 
         }
     }, [isVisible, isTyping, displayedText, onClose, duration]);
 
-    // Dark futuristic variant styles with cyan/purple accents
-    const variants = {
-        default: 'bg-gradient-to-br from-slate-900/95 via-slate-800/90 to-cyan-900/80 text-cyan-100 border-cyan-500/40',
-        error: 'bg-gradient-to-br from-slate-900/95 via-red-900/80 to-rose-900/70 text-rose-200 border-rose-500/50',
-        success: 'bg-gradient-to-br from-slate-900/95 via-emerald-900/80 to-teal-900/70 text-emerald-200 border-emerald-500/50',
-        love: 'bg-gradient-to-br from-slate-900/95 via-pink-900/80 to-purple-900/70 text-pink-200 border-pink-500/50'
+    // Dark cyberpunk thematic style variables
+    const themeVariants = {
+        default: {
+            container: 'bg-slate-955/90 border-cyan-500/30 text-cyan-100 shadow-[0_0_25px_rgba(6,182,212,0.25)]',
+            tail: {
+                above: 'border-t-slate-955/90',
+                below: 'border-b-slate-955/90',
+                left: 'border-l-slate-955/90',
+                right: 'border-r-slate-955/90'
+            },
+            accent: 'border-cyan-400/50',
+            cursor: 'bg-cyan-400'
+        },
+        error: {
+            container: 'bg-slate-955/90 border-rose-500/40 text-rose-200 shadow-[0_0_25px_rgba(244,63,94,0.25)]',
+            tail: {
+                above: 'border-t-slate-955/90',
+                below: 'border-b-slate-955/90',
+                left: 'border-l-slate-955/90',
+                right: 'border-r-slate-955/90'
+            },
+            accent: 'border-rose-400/50',
+            cursor: 'bg-rose-400'
+        },
+        success: {
+            container: 'bg-slate-955/90 border-emerald-500/40 text-emerald-200 shadow-[0_0_25px_rgba(16,185,129,0.25)]',
+            tail: {
+                above: 'border-t-slate-955/90',
+                below: 'border-b-slate-955/90',
+                left: 'border-l-slate-955/90',
+                right: 'border-r-slate-955/90'
+            },
+            accent: 'border-emerald-400/50',
+            cursor: 'bg-emerald-400'
+        },
+        love: {
+            container: 'bg-slate-955/90 border-pink-500/40 text-pink-200 shadow-[0_0_25px_rgba(236,72,153,0.25)]',
+            tail: {
+                above: 'border-t-slate-955/90',
+                below: 'border-b-slate-955/90',
+                left: 'border-l-slate-955/90',
+                right: 'border-r-slate-955/90'
+            },
+            accent: 'border-pink-400/50',
+            cursor: 'bg-pink-400'
+        }
     };
 
-    const glowColors = {
-        default: 'shadow-[0_0_20px_rgba(6,182,212,0.3)]',
-        error: 'shadow-[0_0_20px_rgba(244,63,94,0.3)]',
-        success: 'shadow-[0_0_20px_rgba(16,185,129,0.3)]',
-        love: 'shadow-[0_0_20px_rgba(236,72,153,0.3)]'
+    // Calculate dynamically scaled offsets to ensure absolute contact proximity with visible avatar body
+    const baseOffset = 40 * scale;   // horizontal margin beside model face (brought closer!)
+    const verticalGap = 12 * scale;  // vertical margin above/below head/feet (tighter gap!)
+
+    const placementStyles = {
+        above: {
+            style: {
+                top: '-5%', // shifted above the canvas container border so it never overlaps the head
+                left: '50%',
+                transform: `translate(calc(-50% + ${screenShift.x}px), calc(-100% - ${verticalGap}px + ${screenShift.y}px))`,
+            },
+            tail: 'bottom-[-6px] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent'
+        },
+        below: {
+            style: {
+                top: '92%', // feet height anchor
+                left: '50%',
+                transform: `translate(calc(-50% + ${screenShift.x}px), calc(${verticalGap}px + ${screenShift.y}px))`,
+            },
+            tail: 'top-[-6px] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-b-[6px] border-l-transparent border-r-transparent'
+        },
+        left: {
+            style: {
+                top: '20%', // aligned beside character face
+                left: '50%',
+                transform: `translate(calc(-100% - ${baseOffset}px + ${screenShift.x}px), calc(-50% + ${screenShift.y}px))`,
+            },
+            tail: 'right-[-6px] top-1/2 -translate-y-1/2 w-0 h-0 border-t-[6px] border-b-[6px] border-l-[6px] border-t-transparent border-b-transparent'
+        },
+        right: {
+            style: {
+                top: '20%', // aligned beside character face
+                left: '50%',
+                transform: `translate(calc(${baseOffset}px + ${screenShift.x}px), calc(-50% + ${screenShift.y}px))`,
+            },
+            tail: 'left-[-6px] top-1/2 -translate-y-1/2 w-0 h-0 border-t-[6px] border-b-[6px] border-r-[6px] border-t-transparent border-b-transparent'
+        }
     };
 
-    const bubbleStyle = variants[variant] || variants.default;
-    const glowStyle = glowColors[variant] || glowColors.default;
+    const activeTheme = themeVariants[variant] || themeVariants.default;
+    const activeLayout = placementStyles[placement] || placementStyles.above;
 
-    // Determine bubble placement relative to the character
-    // If character is on the right half of the screen, show bubble on their left. Otherwise, show on right.
-    const isCharacterOnRight = position.x > 0; 
-    
-    // Y-position tweaks: Move it UP to be near the face, not the feet. 
-    // Character Y is relative to center. Face is roughly 200-300px above the character center point, scaled by avatarSize.
-    const bubbleY = position.y - (250 * avatarScale); 
-    
-    // X-position tweaks: Offset to the side of the character.
-    const bubbleX = position.x + ((isCharacterOnRight ? -220 : 220) * avatarScale);
+    // Fluid Framer Motion animations
+    const motionVariants = {
+        initial: { opacity: 0, scale: 0.88 },
+        animate: { opacity: 1, scale: 1 },
+        exit: { opacity: 0, scale: 0.88, transition: { duration: 0.12 } }
+    };
 
     return (
         <AnimatePresence>
             {isVisible && message && (
                 <motion.div
-                    initial={{ opacity: 0, scale: 0.8 * avatarScale, x: isCharacterOnRight ? 20 : -20 }}
-                    animate={{ opacity: 1, scale: 1 * avatarScale, x: 0 }}
-                    exit={{ opacity: 0, scale: 0.8 * avatarScale, x: isCharacterOnRight ? 10 : -10, transition: { duration: 0.2 } }}
-                    transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-                    className="absolute z-50 pointer-events-none"
+                    ref={bubbleRef}
+                    variants={motionVariants}
+                    initial="initial"
+                    animate="animate"
+                    exit="exit"
+                    transition={{ type: 'spring', damping: 24, stiffness: 320 }}
+                    className="absolute z-50 pointer-events-none select-none"
                     style={{
-                        // 50% translates it to center of screen first, then we apply the exact pixel overrides
-                        top: `calc(50% + ${bubbleY}px)`,
-                        left: `calc(50% + ${bubbleX}px)`,
-                        transform: 'translate(-50%, -50%)',
-                        maxWidth: '300px'
+                        width: 'max-content',
+                        maxWidth: '260px',
+                        ...activeLayout.style
                     }}
                 >
-                    <div className={`${bubbleStyle} ${glowStyle} backdrop-blur-xl px-5 py-3 rounded-xl border text-sm font-medium text-center relative`}>
-                        {/* Futuristic corner accents */}
-                        <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-cyan-400/60 rounded-tl" />
-                        <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-cyan-400/60 rounded-tr" />
-                        <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-cyan-400/60 rounded-bl" />
-                        <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-cyan-400/60 rounded-br" />
+                    <div className="bg-slate-950/90 backdrop-blur-xl px-4 py-2.5 rounded-2xl border border-cyan-500/30 text-cyan-100 shadow-[0_0_25px_rgba(6,182,212,0.25)] text-xs font-semibold tracking-wide leading-relaxed relative pointer-events-auto">
+                        {/* Sci-fi tech corner frames */}
+                        <div className={`absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 ${activeTheme.accent} rounded-tl-md`} />
+                        <div className={`absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 ${activeTheme.accent} rounded-tr-md`} />
+                        <div className={`absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 ${activeTheme.accent} rounded-bl-md`} />
+                        <div className={`absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 ${activeTheme.accent} rounded-br-md`} />
 
-                        {/* Emoji decorator based on variant */}
-                        {variant === 'error' && <span className="mr-1">⚠️</span>}
-                        {variant === 'love' && <span className="mr-1">💜</span>}
-                        {variant === 'success' && <span className="mr-1">✨</span>}
+                        {/* Theme decorator icon */}
+                        {variant === 'error' && <span className="mr-1.5 font-sans">⚠️</span>}
+                        {variant === 'love' && <span className="mr-1.5 font-sans">💜</span>}
+                        {variant === 'success' && <span className="mr-1.5 font-sans">✨</span>}
 
                         {displayedText}
 
-                        {/* Futuristic typing cursor */}
+                        {/* Sci-fi typing vertical block cursor */}
                         {isTyping && (
                             <motion.span
-                                animate={{ opacity: [1, 0.3] }}
-                                transition={{ repeat: Infinity, duration: 0.4 }}
-                                className="inline-block ml-1 w-[2px] h-4 bg-cyan-400 align-middle"
+                                animate={{ opacity: [1, 0.2] }}
+                                transition={{ repeat: Infinity, duration: 0.45 }}
+                                className={`inline-block ml-1 w-[2px] h-3 ${activeTheme.cursor} align-middle`}
                             />
                         )}
 
-                        {/* Bubble tail - dynamic positioning */}
-                        <div 
-                            className={`absolute top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-[8px] border-b-[8px] border-t-transparent border-b-transparent ${isCharacterOnRight ? 'right-[-10px] border-l-[10px] border-l-slate-800/90' : 'left-[-10px] border-r-[10px] border-r-slate-800/90'}`} 
-                        />
+                        {/* Interactive dismiss close action */}
+                        <button
+                            onClick={onClose}
+                            className="absolute top-1 right-1.5 w-3 h-3 flex items-center justify-center text-[8px] text-cyan-400/40 hover:text-cyan-200 transition-colors pointer-events-auto cursor-pointer"
+                            title="Dismiss dialog"
+                        >
+                            ✕
+                        </button>
+
+                        {/* Responsive tail pointer */}
+                        <div className={`${activeLayout.tail} ${activeTheme.tail[placement]}`} />
                     </div>
                 </motion.div>
             )}

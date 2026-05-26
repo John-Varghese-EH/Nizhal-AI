@@ -42,9 +42,18 @@ pub struct ProviderConfig {
     pub base_url: Option<String>,
 }
 
-/// Get API key for a provider from store or env
+/// Get API key for a provider: Keyring -> Store -> Env
 fn get_api_key(app: &tauri::AppHandle, provider: &str) -> Option<String> {
-    // First check store
+    // 1. Check OS Keyring first (most secure)
+    if let Ok(entry) = keyring::Entry::new("nizhal-ai", provider) {
+        if let Ok(password) = entry.get_password() {
+            if !password.is_empty() {
+                return Some(password);
+            }
+        }
+    }
+
+    // 2. Fall back to tauri-plugin-store
     if let Ok(store) = app.store("settings.json") {
         let key_path = format!("apiKeys.{}", provider);
         if let Some(val) = store.get(&key_path) {
@@ -56,7 +65,7 @@ fn get_api_key(app: &tauri::AppHandle, provider: &str) -> Option<String> {
         }
     }
 
-    // Fall back to environment variables
+    // 3. Fall back to environment variables
     let env_key = match provider {
         "gemini" => "GEMINI_API_KEY",
         "openai" => "OPENAI_API_KEY",
@@ -425,6 +434,7 @@ fn get_system_prompt(app: &tauri::AppHandle) -> String {
 
 #[tauri::command]
 pub async fn chat(app: tauri::AppHandle, message: String) -> Result<AIResponse, String> {
+    super::validation::validate_message(&message)?;
     let store = app.store("settings.json").map_err(|e| e.to_string())?;
 
     // Get current provider
@@ -537,6 +547,7 @@ pub async fn stream_chat(
     window: tauri::WebviewWindow,
     message: String,
 ) -> Result<(), String> {
+    super::validation::validate_message(&message)?;
     let store = app.store("settings.json").map_err(|e| e.to_string())?;
 
     let provider = store

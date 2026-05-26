@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import MagicSetup from './components/Onboarding/MagicSetup';
+import OnboardingOverlay from './components/Onboarding/OnboardingOverlay';
 import AppLayout from './components/layout/AppLayout';
 import geminiLiveService from '../services/GeminiLiveService';
 import assistant from '../assistant/index.js';
+import ErrorBoundary from './components/ErrorBoundary';
+import HardwarePermissionHelpModal from './components/HardwarePermissionHelpModal';
+import HardwareDiagnostic from './components/HardwareDiagnostic';
+import FirstRunBootloader from './components/FirstRunBootloader';
 
 const ChatView = lazy(() => import('./components/ChatView'));
 const SettingsView = lazy(() => import('./components/SettingsView'));
@@ -22,6 +26,9 @@ const App = () => {
     const [privacyMode, setPrivacyMode] = useState(false);
     const [showOnboarding, setShowOnboarding] = useState(false);
     const [showMirror, setShowMirror] = useState(false);
+    const [permissionDeniedData, setPermissionDeniedData] = useState({ visible: false, type: '', message: '' });
+    const [isAvatarFocused, setIsAvatarFocused] = useState(false);
+    const [showBootloader, setShowBootloader] = useState(false);
 
     // Voice/connection state
     const [isConnected, setIsConnected] = useState(false);
@@ -64,15 +71,89 @@ const App = () => {
             geminiLiveService.setPrivacyMode(enabled);
         });
 
+        const handlePermissionDenied = (e) => {
+            const { type, message } = e.detail;
+            setPermissionDeniedData({ type, message, visible: true });
+        };
+
+        window.addEventListener('nizhal-permission-denied', handlePermissionDenied);
+
+        // Register error and connection state change listeners
+        geminiLiveService.onError = (errorMsg) => {
+            console.error('[App] Gemini Live error:', errorMsg);
+            window.dispatchEvent(new CustomEvent('nizhal-toast', {
+                detail: { message: `Live Voice failed: ${errorMsg}`, type: 'error', duration: 5000 }
+            }));
+            setIsConnected(false);
+            setIsListening(false);
+        };
+
+        geminiLiveService.onStateChange = (state) => {
+            if (state.connected !== undefined) {
+                setIsConnected(state.connected);
+                if (!state.connected) {
+                    setIsListening(false);
+                }
+            }
+        };
+
+        geminiLiveService.onTranscription = (data) => {
+            console.log('[App] Live transcription:', data);
+            if (data.role === 'ai') {
+                window.nizhal?.emit?.('avatar:speak', data.text);
+            } else {
+                window.nizhal?.emit?.('avatar:speak', { text: `You: ${data.text}`, variant: 'default' });
+            }
+        };
+
+        geminiLiveService.onSpeakStart = () => {
+            window.nizhal?.emit?.('avatar:state', { isSpeaking: true });
+        };
+
+        geminiLiveService.onSpeakEnd = () => {
+            window.nizhal?.emit?.('avatar:state', { isSpeaking: false });
+        };
+
+        geminiLiveService.onSpeaking = (data) => {
+            window.nizhal?.emit?.('avatar:audio-energy', data.energy);
+        };
+
         return () => {
             clearInterval(interval);
             if (!window.nizhal) window.removeEventListener('resize', checkWindowState);
+            window.removeEventListener('nizhal-permission-denied', handlePermissionDenied);
             unsubscribePersona?.();
             unsubscribeMood?.();
             unsubscribePrivacy?.();
+            geminiLiveService.onError = null;
+            geminiLiveService.onStateChange = null;
+            geminiLiveService.onTranscription = null;
+            geminiLiveService.onSpeakStart = null;
+            geminiLiveService.onSpeakEnd = null;
+            geminiLiveService.onSpeaking = null;
             geminiLiveService.destroy();
         };
     }, []);
+
+    // Sync character overlay window visibility dynamically based on full screen state
+    useEffect(() => {
+        const syncCompanionWindow = async () => {
+            if (!window.nizhal?.character) return;
+            try {
+                if (windowMode === 'compact') {
+                    await window.nizhal.character.show();
+                } else {
+                    await window.nizhal.character.hide();
+                }
+            } catch (err) {
+                console.warn('[App] Failed to sync companion window state:', err);
+            }
+        };
+
+        if (!isLoading) {
+            syncCompanionWindow();
+        }
+    }, [windowMode, isLoading]);
 
     const initializeApp = async () => {
         try {
@@ -86,12 +167,31 @@ const App = () => {
             setPrivacyMode(privacy || false);
             geminiLiveService.setPrivacyMode(privacy || false);
 
+            // Check if first-run setup is needed
+            try {
+                const firstRunDone = await window.nizhal?.invoke?.('get_setting', {
+                    category: 'app',
+                    key: 'firstRunComplete'
+                });
+                if (!firstRunDone || firstRunDone === null) {
+                    setShowBootloader(true);
+                }
+            } catch (e) {
+                // If setting doesn't exist, show bootloader
+                setShowBootloader(true);
+            }
+
             if (!prefs?.onboardingComplete) setShowOnboarding(true);
 
-            // Launch the transparent avatar window
+            // Launch transparent avatar window always, and sync initial state
             if (window.nizhal?.character?.create) {
                 await window.nizhal.character.create();
-                await window.nizhal.character.show();
+                const isWide = window.innerWidth > 800;
+                if (isWide) {
+                    await window.nizhal.character.hide();
+                } else {
+                    await window.nizhal.character.show();
+                }
             }
         } catch (error) {
             console.error('Failed to initialize:', error);
@@ -171,7 +271,8 @@ const App = () => {
             </motion.div>
         </div>
     );
-    if (showOnboarding) return <MagicSetup onComplete={() => setShowOnboarding(false)} />;
+    if (showBootloader) return <FirstRunBootloader onComplete={() => setShowBootloader(false)} />;
+    if (showOnboarding) return <OnboardingOverlay onComplete={() => setShowOnboarding(false)} />;
 
     const isCompact = windowMode === 'compact';
 
@@ -209,31 +310,50 @@ const App = () => {
                         exit={{ opacity: 0 }}
                         className="h-full flex flex-col md:flex-row"
                     >
-                        {/* Avatar Layer */}
-                        <div className={`relative ${isCompact ? 'absolute inset-0 z-0' : 'w-[450px] shrink-0 h-full z-10 border-r border-white/5'}`}>
-                            <div className="w-full h-full opacity-50 md:opacity-100 transition-opacity">
-                                <Suspense fallback={null}>
-                                    <SkinManager
-                                        personaId={activePersona?.id}
-                                        activeSkin={activePersona?.skin}
-                                        personalityState={personalityState}
-                                        isActive={true}
-                                        showVideoAvatar={isCompact} // Prevent showing two characters on Desktop
-                                    />
-                                </Suspense>
+                        {/* Avatar Layer - Only shown in Full Screen mode to keep compact view clean and spacious */}
+                        {!isCompact && (
+                            <div className="w-[320px] shrink-0 h-full z-10 border-r border-white/5 bg-slate-950/20 backdrop-blur-md">
+                                <div className="relative w-full h-full opacity-100 transition-opacity animate-fade-in">
+                                    <Suspense fallback={null}>
+                                        <ErrorBoundary name="VRM Avatar / Skin Manager" title="Avatar Rendering Stopped">
+                                            <SkinManager
+                                                personaId={activePersona?.id}
+                                                activeSkin={activePersona?.skin}
+                                                personalityState={{
+                                                    ...personalityState,
+                                                    isSpeaking,
+                                                    isThinking,
+                                                    isListening
+                                                }}
+                                                isActive={true}
+                                                showVideoAvatar={true}
+                                            />
+                                        </ErrorBoundary>
+                                    </Suspense>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* Chat Interface */}
-                        <div className={`flex-1 flex flex-col z-20 ${isCompact ? 'bg-black/40 backdrop-blur-sm' : 'bg-transparent'}`}>
+                        <div className={`transition-all duration-500 flex flex-col z-20 ${
+                            isCompact 
+                                ? 'flex-1 bg-slate-950/40 backdrop-blur-xl h-full' 
+                                : isAvatarFocused
+                                    ? 'absolute right-6 bottom-6 w-[420px] h-[calc(100%-80px)] max-h-[620px] glass-panel rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/10'
+                                    : 'flex-1 bg-slate-950/20 backdrop-blur-md h-full'
+                        }`}>
                             <Suspense fallback={<div className="h-full flex items-center justify-center">Loading Chat...</div>}>
-                                <ChatView
-                                    persona={activePersona}
-                                    personalityState={personalityState}
-                                    onListeningChange={setIsListening}
-                                    onThinkingChange={setIsThinking}
-                                    onSpeakingChange={setIsSpeaking}
-                                />
+                                <ErrorBoundary name="Chat Interface" title="Conversational View Degraded">
+                                    <ChatView
+                                        persona={activePersona}
+                                        personalityState={personalityState}
+                                        onListeningChange={setIsListening}
+                                        onThinkingChange={setIsThinking}
+                                        onSpeakingChange={setIsSpeaking}
+                                        isAvatarFocused={isAvatarFocused}
+                                        setIsAvatarFocused={setIsAvatarFocused}
+                                    />
+                                </ErrorBoundary>
                             </Suspense>
                         </div>
                     </motion.div>
@@ -242,7 +362,9 @@ const App = () => {
                 {currentView === 'life' && (
                     <motion.div key="life" className="h-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                         <Suspense fallback={<div className="h-full flex items-center justify-center">Loading Life View...</div>}>
-                            <LifeView />
+                            <ErrorBoundary name="Life Management Hub" title="Life Manager Degraded">
+                                <LifeView />
+                            </ErrorBoundary>
                         </Suspense>
                     </motion.div>
                 )}
@@ -250,16 +372,26 @@ const App = () => {
                 {currentView === 'settings' && (
                     <motion.div key="settings" className="h-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                         <Suspense fallback={<div className="h-full flex items-center justify-center">Loading Settings...</div>}>
-                            <SettingsView
-                                onBack={() => setCurrentView('chat')} // Back button might be redundant in Sidebar mode but good for Compact
-                                onPersonaChange={setActivePersona}
-                                privacyMode={privacyMode}
-                                onPrivacyToggle={() => setPrivacyMode(!privacyMode)}
-                            />
+                            <ErrorBoundary name="System Settings Panel" title="Settings Display Degraded">
+                                <SettingsView
+                                    onBack={() => setCurrentView('chat')} // Back button might be redundant in Sidebar mode but good for Compact
+                                    onPersonaChange={setActivePersona}
+                                    privacyMode={privacyMode}
+                                    onPrivacyToggle={() => setPrivacyMode(!privacyMode)}
+                                />
+                            </ErrorBoundary>
                         </Suspense>
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            <HardwarePermissionHelpModal
+                isOpen={permissionDeniedData.visible}
+                onClose={() => setPermissionDeniedData(prev => ({ ...prev, visible: false }))}
+                data={permissionDeniedData}
+            />
+
+            <HardwareDiagnostic />
         </AppLayout>
     );
 };

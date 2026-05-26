@@ -15,7 +15,7 @@ export const isTauri = !!(window && window.__TAURI_INTERNALS__);
 
 // ─── AI ─────────────────────────────────────────────────────────────────
 export const ai = {
-    chat: (message) => invoke('chat', { message }),
+    chat: (message) => invoke('gateway_chat', { message }),
     streamChat: (message) => invoke('stream_chat', { message }),
     getProviders: () => invoke('get_providers'),
     setProvider: (provider, config) => invoke('set_provider', { provider, config }),
@@ -24,6 +24,10 @@ export const ai = {
     setModel: (provider, model) => invoke('set_model', { provider, model }),
     getEphemeralToken: () => invoke('get_ephemeral_token'),
     clearContext: () => invoke('clear_context'),
+    detectGpu: () => invoke('detect_gpu'),
+    localModelStatus: () => invoke('local_model_status'),
+    localModelDownload: () => invoke('local_model_download'),
+    localModelLoad: () => invoke('local_model_load'),
     checkLocalAI: async () => {
         try {
             const resp = await fetch('http://localhost:11434/api/tags');
@@ -32,6 +36,16 @@ export const ai = {
             return false;
         }
     },
+};
+
+// ─── Keyring ────────────────────────────────────────────────────────────
+export const keyring = {
+    saveKey: (service, key) => invoke('keyring_save_key', { service, key }),
+    getKey: (service) => invoke('keyring_get_key', { service }),
+    deleteKey: (service) => invoke('keyring_delete_key', { service }),
+    hasKey: (service) => invoke('keyring_has_key', { service }),
+    status: () => invoke('keyring_status'),
+    migrateFromStore: () => invoke('keyring_migrate_from_store'),
 };
 
 // ─── Settings ───────────────────────────────────────────────────────────
@@ -321,6 +335,7 @@ const nizhalAPI = {
     persona,
     memory,
     ai,
+    keyring,
     voice,
     payment: { checkout: async () => {}, verify: async () => {} },
     license: { check: async () => true, unlock: async () => true, getUnlocked: async () => [] },

@@ -12,6 +12,53 @@
 
 import * as THREE from 'three';
 import { getAnimationLibrary } from './AnimationLibrary';
+import { getAvatarStateController, STATE_ANIMATIONS } from './AvatarStateController';
+
+/**
+ * Strict Animation Guard
+ * ONLY accepts .vrma files. Rejects everything else.
+ */
+export function AnimationGuard(file_url) {
+    if (!file_url || typeof file_url !== 'string' || !file_url.endsWith('.vrma')) {
+        throw new Error('Illegal Animation Format: CRITICAL_INCOMPATIBILITY_ERROR');
+    }
+}
+
+/**
+ * Anti-Glitch Animation Controller
+ * Prevents joint bleeding and contortion using Atomic Reset and Bind Pose
+ */
+export class AnimationController {
+    constructor(vrm, mixer) {
+        this.vrm = vrm;
+        this.mixer = mixer;
+        this.activeAction = null;
+    }
+
+    play(newClip, duration = 0.3) {
+        // 1. Strict Validation
+        if (!newClip || !newClip.name || !newClip.name.endsWith('.vrma')) {
+            console.error('[AnimationController] Invalid animation format attempted');
+            return;
+        }
+
+        // 2. Prepare the new action
+        const nextAction = this.mixer.clipAction(newClip);
+
+        nextAction.enabled = true;
+        nextAction.setEffectiveTimeScale(1.0);
+        nextAction.setEffectiveWeight(1.0);
+        nextAction.reset();
+        nextAction.play();
+
+        // 3. Smooth blend transition without disruptive stopAllAction/resetPose which breaks physics
+        if (this.activeAction && this.activeAction !== nextAction) {
+            this.activeAction.crossFadeTo(nextAction, duration, true);
+        }
+
+        this.activeAction = nextAction;
+    }
+}
 
 // Animation state
 const AnimationState = {
@@ -20,6 +67,92 @@ const AnimationState = {
     PAUSED: 'paused',
     BLENDING: 'blending'
 };
+
+// State Machine Pattern
+export const StateMachineState = {
+    IDLE: 'IDLE',
+    TRANSITIONING: 'TRANSITIONING',
+    PLAYING: 'PLAYING',
+    LOOPING: 'LOOPING'
+};
+
+export class AnimationStateMachine {
+    constructor(service) {
+        this.service = service;
+        this.state = StateMachineState.IDLE;
+        this.currentPriority = 0;
+        this.currentAnimation = null;
+        this.queue = []; // Array of { name, priority, options }
+    }
+
+    setState(newState) {
+        console.log(`[AnimationStateMachine] Transitioned from ${this.state} to ${newState}`);
+        this.state = newState;
+    }
+
+    async requestAnimation(name, priority = 0, options = {}) {
+        const targetName = name.endsWith('.vrma') ? name : `${name}.vrma`;
+        console.log(`[AnimationStateMachine] Requesting animation: ${targetName} (priority: ${priority})`);
+
+        // Priority logic: if high priority is playing, lower priority animations are queued or discarded
+        if (this.state === StateMachineState.PLAYING || this.state === StateMachineState.LOOPING) {
+            if (priority < this.currentPriority) {
+                console.log(`[AnimationStateMachine] Lower priority requested (${priority} < ${this.currentPriority}). Queuing or discarding.`);
+
+                // If it's a looping animation (like idle), queue it to return to later, otherwise discard one-offs
+                const isLooping = options.loop === THREE.LoopRepeat || options.loop === undefined;
+                if (isLooping) {
+                    // Check if already in queue to prevent duplicates
+                    if (!this.queue.some(item => item.name === targetName)) {
+                        this.queue.push({ name: targetName, priority, options });
+                    }
+                }
+                return false;
+            }
+        }
+
+        // Interrupting current animation
+        this.currentPriority = priority;
+        this.currentAnimation = targetName;
+        this.setState(StateMachineState.TRANSITIONING);
+
+        // Perform crossfade
+        const success = await this.service.crossFadeTo(targetName, options.fadeIn ?? this.service.blendDuration, options);
+        if (success) {
+            const isLooping = options.loop === THREE.LoopRepeat;
+            this.setState(isLooping ? StateMachineState.LOOPING : StateMachineState.PLAYING);
+        } else {
+            this.setState(StateMachineState.IDLE);
+            this.currentPriority = 0;
+            this.currentAnimation = null;
+        }
+
+        return success;
+    }
+
+    onAnimationFinished(finishedClipName) {
+        const targetFinishedName = finishedClipName.endsWith('.vrma') ? finishedClipName : `${finishedClipName}.vrma`;
+        if (this.currentAnimation === targetFinishedName) {
+            console.log(`[AnimationStateMachine] Current playing animation finished: ${targetFinishedName}`);
+
+            // If the state is PLAYING (meaning non-looping one-off), we transition to next
+            if (this.state === StateMachineState.PLAYING) {
+                this.setState(StateMachineState.IDLE);
+                this.currentPriority = 0;
+                this.currentAnimation = null;
+
+                if (this.queue.length > 0) {
+                    // Pull next animation from the queue
+                    const next = this.queue.shift();
+                    this.requestAnimation(next.name, next.priority, next.options);
+                } else {
+                    // Return to standard idle state
+                    this.service.playDefaultIdle();
+                }
+            }
+        }
+    }
+}
 
 /**
  * VRMAnimation - Represents a single VRM Animation
@@ -80,6 +213,7 @@ export class VRMAAnimationService {
         this.animations = new Map(); // name -> { vrmAnimation, clip, action }
         this.currentAnimation = null;
         this.state = AnimationState.IDLE;
+        this.stateMachine = new AnimationStateMachine(this);
         this.lookAtProxy = null;
 
         // Blending - longer duration for smoother transitions
@@ -122,6 +256,15 @@ export class VRMAAnimationService {
 
         this.vrm = vrm;
         this.mixer = new THREE.AnimationMixer(vrm.scene);
+        this.animationController = new AnimationController(vrm, this.mixer);
+
+        // Bind finished event listener to trigger state machine transitions on non-looping animations
+        this.mixer.addEventListener('finished', (e) => {
+            if (e.action && e.action.getClip()) {
+                const name = e.action.getClip().name;
+                this.stateMachine.onAnimationFinished(name);
+            }
+        });
 
         // NOTE: Do NOT apply rest pose here - let VRM use its natural default pose
         // Rest pose will only be applied as fallback if ALL animations fail to load
@@ -136,6 +279,23 @@ export class VRMAAnimationService {
 
         this.isInitialized = true;
         console.log('[VRMAAnimationService] Initialized with VRM:', vrm.meta?.name);
+
+        // Subscribe to AvatarStateController state changes!
+        try {
+            const stateController = getAvatarStateController();
+            this._unsubState = stateController.subscribe((event, data) => {
+                if (event === 'stateChange') {
+                    this.setState(data.to);
+                }
+            });
+            // Play current state immediately on initialization
+            const currentState = stateController.getState();
+            if (currentState) {
+                this.setState(currentState);
+            }
+        } catch (subErr) {
+            console.error('[VRMAAnimationService] Error subscribing to AvatarStateController:', subErr);
+        }
 
         // Auto-load idle animations on init
         this._loadStateAnimations('idle');
@@ -171,6 +331,9 @@ export class VRMAAnimationService {
      * @returns {Promise<boolean>}
      */
     async loadAnimation(url, name) {
+        // Strict Whitelisting via AnimationGuard
+        AnimationGuard(url);
+
         if (!this.vrm) {
             console.error('[VRMAAnimationService] VRM not initialized');
             return false;
@@ -212,11 +375,15 @@ export class VRMAAnimationService {
                         return;
                     }
 
+                    // Assign name for finished-event routing (ensure it ends in .vrma)
+                    const targetName = name.endsWith('.vrma') ? name : `${name}.vrma`;
+                    clip.name = targetName;
+
                     // Create action
                     const action = this.mixer.clipAction(clip);
 
                     // Store animation
-                    this.animations.set(name, {
+                    this.animations.set(targetName, {
                         vrmAnimation,
                         clip,
                         action,
@@ -245,7 +412,8 @@ export class VRMAAnimationService {
         const tracks = [];
 
         // Humanoid bone tracks
-        const humanoidTracks = this._createHumanoidTracks(vrmAnimation, vrm.humanoid, vrm.meta?.metaVersion || '1');
+        const specVersion = vrm.meta?.specVersion || vrm.meta?.metaVersion || '0.0';
+        const humanoidTracks = this._createHumanoidTracks(vrmAnimation, vrm.humanoid, specVersion);
         tracks.push(...humanoidTracks.translation.values());
         tracks.push(...humanoidTracks.rotation.values());
 
@@ -274,9 +442,18 @@ export class VRMAAnimationService {
     /**
      * Create humanoid bone tracks from VRMAnimation
      */
-    _createHumanoidTracks(vrmAnimation, humanoid, metaVersion) {
+    _createHumanoidTracks(vrmAnimation, humanoid, specVersion) {
         const translation = new Map();
         const rotation = new Map();
+
+        let isVRM0 = true;
+        if (specVersion) {
+            isVRM0 = String(specVersion).startsWith('0');
+        } else if (this.vrm?.blendShapeProxy) {
+            isVRM0 = true;
+        } else if (this.vrm?.expressionManager && !this.vrm?.blendShapeProxy) {
+            isVRM0 = false;
+        }
 
         // Rotation tracks
         for (const [name, origTrack] of vrmAnimation.humanoidTracks.rotation.entries()) {
@@ -287,7 +464,7 @@ export class VRMAAnimationService {
                 `${bone.name}.quaternion`,
                 origTrack.times,
                 // Handle VRM 0.x vs 1.0 coordinate system differences
-                origTrack.values.map((v, i) => ((metaVersion === '0' || metaVersion === '0.0') && i % 2 === 0 ? -v : v))
+                origTrack.values.map((v, i) => (isVRM0 && i % 2 === 0 ? -v : v))
             );
             rotation.set(name, track);
         }
@@ -302,11 +479,11 @@ export class VRMAAnimationService {
 
             // Scale translation based on avatar height
             const animationY = vrmAnimation.restHipsPosition.y || 1;
-            const humanoidY = humanoid.normalizedRestPose?.hips?.position?.[1] || 1;
-            const scale = humanoidY / animationY;
+            const humanoidY = humanoid.normalizedRestPose?.hips?.position?.[1] || 1.0;
+            const scale = humanoidY > 0.01 ? (humanoidY / animationY) : 1.0;
 
             const track = origTrack.clone();
-            track.values = track.values.map((v, i) => ((metaVersion === '0' || metaVersion === '0.0') && i % 3 !== 1 ? -v : v) * scale);
+            track.values = track.values.map((v, i) => (isVRM0 && i % 3 !== 1 ? -v : v) * scale);
             track.name = `${bone.name}.position`;
             translation.set(name, track);
         }
@@ -344,88 +521,66 @@ export class VRMAAnimationService {
         return { preset, custom };
     }
 
+    /**
+     * Request an animation to be played through the state machine priority queue
+     */
     play(name, options = {}) {
-        const animation = this.animations.get(name);
+        const targetName = name.endsWith('.vrma') ? name : `${name}.vrma`;
+        const priority = options.priority ?? 0;
+        return this.stateMachine.requestAnimation(targetName, priority, options);
+    }
+
+    /**
+     * Plays the default idle animation (priority 0)
+     */
+    async playDefaultIdle() {
+        const animConfig = this.library.getAnimationForState('idle');
+        if (animConfig) {
+            if (!this.hasAnimation(animConfig.name)) {
+                await this.loadAnimation(animConfig.path, animConfig.name);
+            }
+            return this.stateMachine.requestAnimation(animConfig.name, 0, { loop: THREE.LoopRepeat });
+        }
+        return false;
+    }
+
+    /**
+     * Performs standard THREE.AnimationMixer cross-fade blending between the current and next animations.
+     * Integrates explicit uncaching of the old action after the blend completes to prevent memory leaks and joint contortions.
+     */
+    async crossFadeTo(nextAnimation, duration = 0.3, options = {}) {
+        const targetName = nextAnimation.endsWith('.vrma') ? nextAnimation : `${nextAnimation}.vrma`;
+        const animation = this.animations.get(targetName);
         if (!animation) {
-            console.warn(`[VRMAAnimationService] Animation not found: ${name}`);
+            console.warn(`[VRMAAnimationService] Animation not found for crossfade: ${targetName}`);
             return false;
         }
 
-        // Prevent restarting the same looping animation if it's already playing
-        if (this.currentAnimation === name && this.state === AnimationState.PLAYING) {
-            const currentAction = animation.action;
-            if (currentAction && currentAction.isRunning() && currentAction.loop === THREE.LoopRepeat) {
-                // It's already playing and looping, perfectly fine to do nothing
-                // Just update timeScale if needed
-                if (options.timeScale) currentAction.timeScale = options.timeScale;
-                return true;
-            }
-        }
+        // Configure loop and timeScale options
+        const loop = options.loop ?? THREE.LoopRepeat;
+        const timeScale = options.timeScale ?? 1.0;
 
-        const {
-            loop = THREE.LoopRepeat,
-            fadeIn = this.blendDuration,
-            timeScale = 1.0
-        } = options;
+        // Play using the AnimationController class structure (The Anti-Glitch Step)
+        if (this.animationController) {
+            const clip = animation.clip;
+            const action = this.mixer.clipAction(clip);
+            action.setEffectiveTimeScale(timeScale);
+            action.setLoop(loop, Infinity);
+            action.clampWhenFinished = true;
 
-        const newAction = animation.action;
-
-        // Setup the new action
-        newAction.enabled = true;
-        newAction.setEffectiveTimeScale(timeScale);
-        newAction.setEffectiveWeight(1); // Default to 1, crossFade will adjust if needed
-        newAction.setLoop(loop, Infinity);
-        newAction.clampWhenFinished = true; // CRITICAL: Prevents snapping to T-Pose when animation ends
-
-        // CRITICAL FIX FOR LEG-TO-HEAD CONTORTIONS:
-        // Automatically stop any non-current background actions to prevent weight accumulation
-        for (const [animName, animData] of this.animations.entries()) {
-            if (animName !== name && animName !== this.currentAnimation) {
-                if (animData.action && animData.action.isRunning()) {
-                    animData.action.stop(); 
-                }
-            }
-        }
-
-        // Handle Cross-fading
-        if (this.currentAnimation && this.currentAnimation !== name) {
-            const current = this.animations.get(this.currentAnimation);
-            const currentAction = current?.action;
-
-            if (currentAction && currentAction.isRunning()) {
-                // Reset new action to start
-                newAction.reset();
-                // Ensure target has full weight goal for crossfade interpolation
-                newAction.setEffectiveWeight(1.0);
-                newAction.setEffectiveTimeScale(1.0);
-                newAction.play();
-
-                // Crossfade: transitions weights from current -> new seamlessly
-                // Check if current action has any weight to fade from
-                const currentWeight = currentAction.getEffectiveWeight();
-                if (currentWeight > 0.01) {
-                    currentAction.crossFadeTo(newAction, fadeIn, true);
-                } else {
-                    currentAction.stop();
-                    newAction.fadeIn(fadeIn);
-                }
-            } else {
-                // Old action not running, just fade in new one from 0
-                newAction.reset();
-                newAction.play();
-                newAction.fadeIn(fadeIn);
-            }
+            this.animationController.play(clip, duration);
         } else {
-            // No previous animation (or restarting same one), fade in from rest pose
+            // Fallback to direct mixer if controller not initialized
+            const newAction = this.mixer.clipAction(animation.clip);
+            newAction.setEffectiveTimeScale(timeScale);
+            newAction.setLoop(loop, Infinity);
+            newAction.clampWhenFinished = true;
             newAction.reset();
             newAction.play();
-            newAction.fadeIn(fadeIn);
         }
 
-        this.currentAnimation = name;
+        this.currentAnimation = targetName;
         this.state = AnimationState.PLAYING;
-
-        console.log(`[VRMAAnimationService] Playing: ${name} (Crossfade: ${fadeIn}s)`);
         return true;
     }
 
@@ -439,14 +594,18 @@ export class VRMAAnimationService {
                 animation.action.fadeOut(fadeOut);
             }
         }
-        
+
         // Also cleanup fallback rest pose
         for (const animData of this.animations.values()) {
             if (animData.action && animData.action.isRunning()) {
                 animData.action.fadeOut(fadeOut);
             }
         }
-        
+
+        if (this.animationController) {
+            this.animationController.activeAction = null;
+        }
+
         this.currentAnimation = null;
         this.state = AnimationState.IDLE;
     }
@@ -484,8 +643,8 @@ export class VRMAAnimationService {
     update(delta) {
         if (this.mixer) {
             this.mixer.update(delta);
-            // Enforce upright orientation after animation update
-            this._clampModelOrientation();
+            // Enforce upright orientation after animation update (disabled to prevent keyframe conflict stuttering)
+            // this._clampModelOrientation();
         }
 
         // Animation watchdog - prevent T-pose by ensuring animation is always playing
@@ -573,17 +732,41 @@ export class VRMAAnimationService {
             const hipsBone = this.vrm.humanoid.getNormalizedBoneNode('hips');
             if (!hipsBone) return;
 
-            // Max tilt: ±30 degrees (0.52 rad) for X (forward/back lean) and Z (side lean)
-            const MAX_TILT = 0.52;
+            const q = hipsBone.quaternion;
 
-            // Clamp X rotation (pitch — forward/backward tilt)
-            if (Math.abs(hipsBone.rotation.x) > MAX_TILT) {
-                hipsBone.rotation.x = Math.sign(hipsBone.rotation.x) * MAX_TILT;
+            // 1. Extract twist (Y-rotation only) to separate yaw
+            const magY = Math.sqrt(q.y * q.y + q.w * q.w);
+            if (magY < 0.001) return; // Avoid divide by zero
+
+            const qTwist = new THREE.Quaternion(0, q.y / magY, 0, q.w / magY);
+
+            // 2. Extract swing (tilt) via swing-twist decomposition: q = qSwing * qTwist => qSwing = q * qTwist^-1
+            const qTwistInv = qTwist.clone().invert();
+            const qSwing = q.clone().multiply(qTwistInv);
+
+            // 3. Measure swing tilt angle: angle = 2 * acos(w)
+            let cosHalfAngle = qSwing.w;
+            if (cosHalfAngle < 0) {
+                qSwing.x = -qSwing.x;
+                qSwing.y = -qSwing.y;
+                qSwing.z = -qSwing.z;
+                qSwing.w = -qSwing.w;
+                cosHalfAngle = qSwing.w;
             }
 
-            // Clamp Z rotation (roll — side tilt, main cause of horizontal bug)
-            if (Math.abs(hipsBone.rotation.z) > MAX_TILT) {
-                hipsBone.rotation.z = Math.sign(hipsBone.rotation.z) * MAX_TILT;
+            const halfAngle = Math.acos(Math.min(1.0, Math.max(-1.0, cosHalfAngle)));
+            const angle = halfAngle * 2.0;
+
+            const MAX_TILT = 0.45; // ~25 degrees - extremely safe upright constraint
+
+            if (angle > MAX_TILT) {
+                // Clamp by spherical interpolating swing towards identity (upright)
+                const t = MAX_TILT / angle;
+                const qIdentity = new THREE.Quaternion(0, 0, 0, 1);
+                qSwing.slerp(qIdentity, 1.0 - t);
+
+                // Recombine clamped swing with original twist yaw: q = qSwing * qTwist
+                hipsBone.quaternion.copy(qSwing.multiply(qTwist));
             }
         } catch (e) {
             // Silently ignore — some models might not have standard hips bone
@@ -663,7 +846,8 @@ export class VRMAAnimationService {
      * Check if an animation is loaded
      */
     hasAnimation(name) {
-        return this.animations.has(name);
+        const targetName = name.endsWith('.vrma') ? name : `${name}.vrma`;
+        return this.animations.has(targetName);
     }
 
     /**
@@ -718,7 +902,23 @@ export class VRMAAnimationService {
                 ...options
             };
 
-            return this.play(animConfig.name, playOptions);
+            const result = this.play(animConfig.name, playOptions);
+
+            // Apply facial expression if defined for this state
+            try {
+                const stateConfig = STATE_ANIMATIONS[avatarState];
+                if (stateConfig && stateConfig.expression && this.vrm?.expressionManager) {
+                    this._blendToExpression(
+                        stateConfig.expression,
+                        stateConfig.expressionWeight ?? 0.5,
+                        500 // morph over 500ms
+                    );
+                }
+            } catch (exprErr) {
+                console.error('[VRMAAnimationService] Error blending expression inside setState:', exprErr);
+            }
+
+            return result;
         } catch (err) {
             console.error(`[VRMAAnimationService] Error setting state ${avatarState}:`, err);
             return false;
@@ -1009,6 +1209,13 @@ export class VRMAAnimationService {
     dispose() {
         this.stop(0);
 
+        if (this._unsubState) {
+            try {
+                this._unsubState();
+            } catch (unsubErr) { }
+            this._unsubState = null;
+        }
+
         if (this.mixer) {
             this.mixer.stopAllAction();
             this.mixer = null;
@@ -1062,11 +1269,75 @@ class VRMALoaderPlugin {
         // Parse node mappings
         const nodeMap = this._createNodeMap(defExtension);
 
-        // Parse animations
+        // Map glTF node indices to Three.js Object3D names using parser dependency resolution
+        const nodeIndexToName = new Map();
+
+        // 1. Resolve humanoid bone node names
+        const humanBones = defExtension.humanoid?.humanBones;
+        if (humanBones) {
+            for (const [name, bone] of Object.entries(humanBones)) {
+                const node = bone?.node;
+                if (node != null) {
+                    try {
+                        const object = await this.parser.getDependency('node', node);
+                        if (object) {
+                            nodeIndexToName.set(node, object.name);
+                        }
+                    } catch (e) {
+                        console.warn(`[VRMALoaderPlugin] Failed to resolve bone node: ${node}`, e);
+                    }
+                }
+            }
+        }
+
+        // 2. Resolve expression preset node names
+        const preset = defExtension.expressions?.preset;
+        if (preset) {
+            for (const [name, expression] of Object.entries(preset)) {
+                const node = expression?.node;
+                if (node != null) {
+                    try {
+                        const object = await this.parser.getDependency('node', node);
+                        if (object) {
+                            nodeIndexToName.set(node, object.name);
+                        }
+                    } catch (e) {}
+                }
+            }
+        }
+
+        // 3. Resolve expression custom node names
+        const custom = defExtension.expressions?.custom;
+        if (custom) {
+            for (const [name, expression] of Object.entries(custom)) {
+                const node = expression?.node;
+                if (node != null) {
+                    try {
+                        const object = await this.parser.getDependency('node', node);
+                        if (object) {
+                            nodeIndexToName.set(node, object.name);
+                        }
+                    } catch (e) {}
+                }
+            }
+        }
+
+        // 4. Resolve LookAt node name
+        const lookAtIndex = defExtension.lookAt?.node ?? null;
+        if (lookAtIndex != null) {
+            try {
+                const object = await this.parser.getDependency('node', lookAtIndex);
+                if (object) {
+                    nodeIndexToName.set(lookAtIndex, object.name);
+                }
+            } catch (e) {}
+        }
+
+        // Parse animations using name-matched keyframe tracks
         const clips = gltf.animations;
         const animations = clips.map((clip, iAnimation) => {
             const defAnimation = defGltf.animations[iAnimation];
-            return this._parseAnimation(clip, defAnimation, nodeMap);
+            return this._parseAnimation(clip, defAnimation, nodeMap, nodeIndexToName);
         });
 
         gltf.userData.vrmAnimations = animations;
@@ -1113,18 +1384,30 @@ class VRMALoaderPlugin {
         return { humanoidIndexToName, expressionsIndexToName, lookAtIndex };
     }
 
-    _parseAnimation(animationClip, defAnimation, nodeMap) {
+    _parseAnimation(animationClip, defAnimation, nodeMap, nodeIndexToName) {
         const tracks = animationClip.tracks;
         const defChannels = defAnimation.channels;
 
         const result = new VRMAnimation();
         result.duration = animationClip.duration;
 
-        defChannels.forEach((channel, iChannel) => {
+        defChannels.forEach((channel) => {
             const { node, path } = channel.target;
-            const origTrack = tracks[iChannel];
-
             if (node == null) return;
+
+            const nodeName = nodeIndexToName.get(node);
+            if (!nodeName) return;
+
+            const prop = path === 'rotation' ? 'quaternion' : (path === 'translation' ? 'position' : 'scale');
+            const targetTrackName = `${nodeName}.${prop}`;
+
+            // Bulletproof: Find track matching target Object3D name and target property
+            const origTrack = tracks.find(t => 
+                t.name === targetTrackName || 
+                (t.name.endsWith('.' + prop) && t.name.includes(nodeName))
+            );
+
+            if (!origTrack) return;
 
             // Humanoid bones
             const boneName = nodeMap.humanoidIndexToName.get(node);

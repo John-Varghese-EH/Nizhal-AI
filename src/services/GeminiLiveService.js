@@ -1,17 +1,13 @@
 /**
- * GeminiLiveService - Real-time voice streaming with Gemini Live API
- * Ported from Kreo 2.0
- * 
- * Features:
- * - WebSocket connection to Gemini Live
- * - Bidirectional audio streaming
- * - Real-time transcription
- * - Function calling support
- * - Privacy mode (disables cloud when enabled)
+ * GeminiLiveService.js
+ *
+ * Provides real-time, low-latency bidirectional voice communication
+ * utilizing the Gemini Live API over WebSockets.
  */
 
 import { voiceTools } from './VoiceTools.js';
 import assistant from '../assistant/index.js';
+import PermissionService from './PermissionService.js';
 
 const MODEL_NAME = 'gemini-2.0-flash-exp';
 const INPUT_SAMPLE_RATE = 16000;
@@ -22,38 +18,57 @@ class GeminiLiveService {
         this.session = null;
         this.isConnected = false;
         this.isPrivacyMode = false;
+        this.isMicrophoneMuted = false;
 
-        // Audio contexts
+        // Web Audio components
         this.inputContext = null;
         this.outputContext = null;
         this.inputProcessor = null;
         this.inputSource = null;
         this.outputNode = null;
 
-        // Analysers for visualizer
+        // Telemetry analysers
         this.analyserIn = null;
         this.analyserOut = null;
 
-        // Audio playback
+        // Stream handlers
         this.activeSources = new Set();
         this.nextStartTime = 0;
-
-        // Stream reference
         this.stream = null;
+        this.isSpeaking = false;
 
-        // Callbacks
+        // Watchdog parameters
+        this.watchdogTimer = null;
+        this.lastMessageTime = Date.now();
+
+        // Standard callback bindings
         this.onStateChange = null;
         this.onTranscription = null;
         this.onAudioLevel = null;
         this.onError = null;
-        this.onSpeakStart = null;  // Called when AI starts speaking
-        this.onSpeakEnd = null;    // Called when AI stops speaking
-        this.onSpeaking = null;    // Called with audio data for lip-sync
-        this.isSpeaking = false;
+        this.onSpeakStart = null;
+        this.onSpeakEnd = null;
+        this.onSpeaking = null;
+
+        console.log('[GeminiLiveService] Service initialized');
     }
 
     /**
-     * Set privacy mode - when enabled, blocks all cloud connections
+     * Initializes components and resets active runtimes.
+     */
+    async init() {
+        try {
+            await this.reset();
+            this.startWatchdog();
+            return { success: true };
+        } catch (error) {
+            console.error('[GeminiLiveService] Initialization failure:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
+     * Toggles privacy mode. When active, all cloud endpoints are unreachable.
      */
     setPrivacyMode(enabled) {
         this.isPrivacyMode = enabled;
@@ -63,7 +78,15 @@ class GeminiLiveService {
     }
 
     /**
-     * Initialize audio contexts and analysers
+     * Toggles local microphone input streams.
+     */
+    setMuted(muted) {
+        this.isMicrophoneMuted = muted;
+        console.log('[GeminiLiveService] Local microphone muted:', muted);
+    }
+
+    /**
+     * Prepares core Web Audio pipeline components.
      */
     ensureAudioContexts() {
         if (!this.inputContext) {
@@ -88,7 +111,7 @@ class GeminiLiveService {
     }
 
     /**
-     * Get analyser nodes for visualizer
+     * Exposes visualizer analyzer nodes.
      */
     getAnalysers() {
         return {
@@ -98,24 +121,47 @@ class GeminiLiveService {
     }
 
     /**
-     * Connect to Gemini Live API
+     * Establishes dynamic WebSocket links directly into the Gemini Live endpoints.
      */
     async connect(apiKey, systemInstruction = '', tools = []) {
         if (this.isPrivacyMode) {
-            console.warn('[GeminiLive] Privacy mode enabled, blocking cloud connection');
-            this.onError?.('Privacy mode is enabled. Disable it to use cloud AI.');
+            const err = 'Privacy mode active - cloud streams are blocked';
+            console.warn('[GeminiLiveService]', err);
+            this.onError?.(err);
             return false;
         }
 
         if (!apiKey) {
-            this.onError?.('Gemini API key is required');
+            const err = 'Gemini API key is required';
+            console.warn('[GeminiLiveService]', err);
+            this.onError?.(err);
+            return false;
+        }
+
+        // Pre-flight permission check
+        const permStatus = await PermissionService.check();
+        if (permStatus.mic === 'prompt') {
+            const result = await PermissionService.request('microphone');
+            if (result !== 'granted') {
+                const err = 'Microphone permission prompt was not granted';
+                console.warn('[GeminiLiveService]', err);
+                this.onError?.(err);
+                return false;
+            }
+        } else if (permStatus.mic === 'denied') {
+            const err = 'Microphone permission is blocked in OS/Browser settings';
+            console.warn('[GeminiLiveService]', err);
+            window.dispatchEvent(new CustomEvent('nizhal-permission-denied', {
+                detail: { type: 'microphone', message: 'Microphone access is blocked in System Settings.' }
+            }));
+            this.onError?.(err);
             return false;
         }
 
         try {
             this.ensureAudioContexts();
 
-            // Request microphone access
+            // Request capture hardware access
             this.stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     sampleRate: INPUT_SAMPLE_RATE,
@@ -125,7 +171,6 @@ class GeminiLiveService {
                 }
             });
 
-            // Setup input processing
             this.inputSource = this.inputContext.createMediaStreamSource(this.stream);
             this.inputProcessor = this.inputContext.createScriptProcessor(4096, 1, 1);
 
@@ -133,12 +178,9 @@ class GeminiLiveService {
             this.inputSource.connect(this.inputProcessor);
             this.inputProcessor.connect(this.inputContext.destination);
 
-            // Import Google GenAI SDK dynamically
             const { GoogleGenAI, Modality } = await import('@google/genai');
-
             const genAI = new GoogleGenAI(apiKey);
 
-            // Connect to Gemini Live
             this.session = await genAI.live.connect(MODEL_NAME, {
                 config: {
                     responseModalities: [Modality.AUDIO, Modality.TEXT],
@@ -147,7 +189,7 @@ class GeminiLiveService {
                             prebuiltVoiceConfig: { voiceName: 'Kore' }
                         }
                     },
-                    systemInstruction: systemInstruction || 'You are Nizhal AI, a helpful and friendly desktop companion assistant.',
+                    systemInstruction: systemInstruction || 'You are Nizhal AI, a friendly local desktop assistant.',
                     tools: [
                         ...tools,
                         {
@@ -172,10 +214,9 @@ class GeminiLiveService {
                 }
             });
 
-            // Handle audio input
-            let isMuted = false;
+            // Pipeline process callback
             this.inputProcessor.onaudioprocess = (e) => {
-                if (isMuted || !this.session) return;
+                if (this.isMicrophoneMuted || !this.session || !this.isConnected) return;
 
                 const inputData = e.inputBuffer.getChannelData(0);
                 const pcm16 = new Int16Array(inputData.length);
@@ -194,50 +235,46 @@ class GeminiLiveService {
                 }]);
             };
 
-            // Handle session events
             this.session.on('open', () => {
-                console.log('[GeminiLive] Connected');
+                console.log('[GeminiLiveService] WebSocket session established');
                 this.isConnected = true;
+                this.lastMessageTime = Date.now();
                 this.onStateChange?.({ connected: true });
             });
 
             this.session.on('message', (message) => {
+                this.lastMessageTime = Date.now();
                 this.handleServerMessage(message);
             });
 
             this.session.on('close', () => {
-                console.log('[GeminiLive] Disconnected');
+                console.log('[GeminiLiveService] WebSocket session terminated');
                 this.isConnected = false;
                 this.onStateChange?.({ connected: false });
             });
 
             this.session.on('error', (err) => {
-                console.error('[GeminiLive] Error:', err);
-                this.onError?.(err.message || 'Connection error');
+                console.error('[GeminiLiveService] Session error event:', err);
+                this.onError?.(err.message || 'WebSocket session error');
             });
-
-            // Store mute toggle function
-            this.setMuted = (muted) => { isMuted = muted; };
 
             return true;
         } catch (error) {
-            console.error('[GeminiLive] Connection failed:', error);
-            this.onError?.(error.message || 'Failed to connect');
+            console.error('[GeminiLiveService] Connection attempt failed:', error);
+            this.onError?.(error.message || 'Connection pipeline setup error');
             return false;
         }
     }
 
     /**
-     * Handle incoming server messages
+     * Dispatcher routing received stream data packages.
      */
     handleServerMessage(message) {
-        // Handle audio response
         if (message.data) {
             const audioData = this.base64ToArrayBuffer(message.data);
             this.playAudio(audioData);
         }
 
-        // Handle text transcription
         if (message.serverContent?.modelTurn?.parts) {
             for (const part of message.serverContent.modelTurn.parts) {
                 if (part.text) {
@@ -246,7 +283,6 @@ class GeminiLiveService {
             }
         }
 
-        // Handle user transcription
         if (message.serverContent?.inputTranscript) {
             this.onTranscription?.({
                 role: 'user',
@@ -254,31 +290,25 @@ class GeminiLiveService {
             });
         }
 
-        // Handle tool calls
         if (message.toolCall) {
             this.handleToolCall(message.toolCall);
         }
     }
 
     /**
-     * Handle function/tool calls from Gemini
+     * Handles tool and function execution triggered by LLM responses.
      */
     async handleToolCall(toolCall) {
-        console.log('[GeminiLive] Tool call:', toolCall);
-
-        let result = { success: false, message: 'Tool not implemented' };
+        console.log('[GeminiLiveService] Tool request received:', toolCall);
+        let result = { success: false, message: 'Tool execution error' };
 
         try {
             const functionName = toolCall.functionCalls?.[0]?.name;
             const args = toolCall.functionCalls?.[0]?.args || {};
 
-            // Built-in tool handling
             switch (functionName) {
                 case 'get_current_time':
-                    result = {
-                        success: true,
-                        response: voiceTools.getTime()
-                    };
+                    result = { success: true, response: voiceTools.getTime() };
                     break;
 
                 case 'get_weather':
@@ -292,52 +322,49 @@ class GeminiLiveService {
                     break;
 
                 case 'calculate':
-                    result = {
-                        success: true,
-                        response: voiceTools.calculate(args.expression)
-                    };
+                    result = { success: true, response: voiceTools.calculate(args.expression) };
                     break;
 
                 case 'set_reminder':
-                    result = {
-                        success: true,
-                        response: voiceTools.setReminder(args.message, args.minutes)
-                    };
+                    result = { success: true, response: voiceTools.setReminder(args.message, args.minutes) };
                     break;
 
                 case 'open_application':
                     if (window.nizhal?.system?.launchApp) {
                         await window.nizhal.system.launchApp(args.appName);
-                        result = { success: true, message: `Opened ${args.appName}` };
+                        result = { success: true, message: `Application ${args.appName} launched` };
                     }
                     break;
 
                 case 'join_livekit_room':
                     const roomName = args.roomName || 'john-personal';
                     await assistant.roomManager.connect(roomName);
-                    result = { success: true, message: `Joined voice room: ${roomName}` };
+                    result = { success: true, message: `Joined livekit conference: ${roomName}` };
                     break;
 
                 default:
-                    result = { success: false, message: `Unknown tool: ${functionName}` };
+                    result = { success: false, message: `Function ${functionName} not found` };
             }
         } catch (error) {
             result = { success: false, error: error.message };
         }
 
-        // Send tool response back
         if (this.session) {
-            this.session.sendToolResponse({
-                functionResponses: [{
-                    response: result,
-                    id: toolCall.functionCalls?.[0]?.id
-                }]
-            });
+            try {
+                this.session.sendToolResponse({
+                    functionResponses: [{
+                        response: result,
+                        id: toolCall.functionCalls?.[0]?.id
+                    }]
+                });
+            } catch (err) {
+                console.error('[GeminiLiveService] Failed to return tool execution results:', err);
+            }
         }
     }
 
     /**
-     * Play audio response
+     * Decodes and streams AI voice frames safely.
      */
     playAudio(audioData) {
         if (!this.outputContext || !this.outputNode) return;
@@ -358,13 +385,11 @@ class GeminiLiveService {
 
         this.activeSources.add(source);
 
-        // Trigger lip-sync callbacks
         if (!this.isSpeaking) {
             this.isSpeaking = true;
             this.onSpeakStart?.();
         }
 
-        // Calculate audio energy for lip-sync
         let energy = 0;
         for (let i = 0; i < float32.length; i++) {
             energy += Math.abs(float32[i]);
@@ -374,7 +399,6 @@ class GeminiLiveService {
 
         source.onended = () => {
             this.activeSources.delete(source);
-            // Check if all sources finished
             if (this.activeSources.size === 0) {
                 this.isSpeaking = false;
                 this.onSpeakEnd?.();
@@ -387,65 +411,68 @@ class GeminiLiveService {
     }
 
     /**
-     * Send text message to session
+     * Dispatches runtime user texts.
      */
     sendText(text) {
         if (!this.session || !this.isConnected) {
-            console.warn('[GeminiLive] Not connected');
+            console.warn('[GeminiLiveService] Text dispatch skipped - session disconnected');
             return false;
         }
-
-        this.session.sendRealtimeInput([{ text }]);
-        return true;
+        try {
+            this.session.sendRealtimeInput([{ text }]);
+            return true;
+        } catch (error) {
+            console.error('[GeminiLiveService] Text dispatch error:', error);
+            return false;
+        }
     }
 
     /**
-     * Send image to session
+     * Dispatches runtime visual matrix.
      */
     sendImage(base64Data, mimeType = 'image/jpeg') {
         if (!this.session || !this.isConnected) {
-            console.warn('[GeminiLive] Not connected');
+            console.warn('[GeminiLiveService] Visual dispatch skipped - session disconnected');
             return false;
         }
-
-        this.session.sendRealtimeInput([{
-            media: {
-                mimeType,
-                data: base64Data
-            }
-        }]);
-        return true;
+        try {
+            this.session.sendRealtimeInput([{
+                media: { mimeType, data: base64Data }
+            }]);
+            return true;
+        } catch (error) {
+            console.error('[GeminiLiveService] Visual dispatch error:', error);
+            return false;
+        }
     }
 
     /**
-     * Disconnect from Gemini Live
+     * Safely closes open sessions and hardware nodes.
      */
     disconnect() {
-        // Stop audio sources
         this.activeSources.forEach(source => {
-            try { source.stop(); } catch (e) { }
+            try { source.stop(); } catch (e) {}
         });
         this.activeSources.clear();
 
-        // Disconnect input
         if (this.inputProcessor) {
-            this.inputProcessor.disconnect();
+            try { this.inputProcessor.disconnect(); } catch (e) {}
             this.inputProcessor = null;
         }
         if (this.inputSource) {
-            this.inputSource.disconnect();
+            try { this.inputSource.disconnect(); } catch (e) {}
             this.inputSource = null;
         }
 
-        // Stop media stream
         if (this.stream) {
-            this.stream.getTracks().forEach(track => track.stop());
+            this.stream.getTracks().forEach(track => {
+                try { track.stop(); } catch (e) {}
+            });
             this.stream = null;
         }
 
-        // Close session
         if (this.session) {
-            try { this.session.close(); } catch (e) { }
+            try { this.session.close(); } catch (e) {}
             this.session = null;
         }
 
@@ -455,40 +482,38 @@ class GeminiLiveService {
     }
 
     /**
-     * Set mute state
+     * Stop alias.
      */
-    setMuted(muted) {
-        // This function is set during connect()
+    stop() {
+        this.disconnect();
     }
 
     /**
-     * Helper: ArrayBuffer to Base64
+     * Performs clean teardowns and parameter clearing.
      */
-    arrayBufferToBase64(buffer) {
-        let binary = '';
-        const bytes = new Uint8Array(buffer);
-        for (let i = 0; i < bytes.byteLength; i++) {
-            binary += String.fromCharCode(bytes[i]);
+    async reset() {
+        this.disconnect();
+
+        if (this.inputContext) {
+            try { await this.inputContext.close(); } catch (e) {}
+            this.inputContext = null;
         }
-        return btoa(binary);
-    }
-
-    /**
-     * Helper: Base64 to ArrayBuffer
-     */
-    base64ToArrayBuffer(base64) {
-        const binary = atob(base64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-            bytes[i] = binary.charCodeAt(i);
+        if (this.outputContext) {
+            try { await this.outputContext.close(); } catch (e) {}
+            this.outputContext = null;
         }
-        return bytes.buffer;
+
+        this.ensureAudioContexts();
+        this.isSpeaking = false;
+        this.isMicrophoneMuted = false;
+        this.nextStartTime = 0;
     }
 
     /**
-     * Cleanup
+     * Terminate completely.
      */
     destroy() {
+        this.stopWatchdog();
         this.disconnect();
 
         if (this.inputContext) {
@@ -500,9 +525,68 @@ class GeminiLiveService {
             this.outputContext = null;
         }
     }
+
+    /**
+     * Returns a snapshot of the current service status.
+     */
+    getState() {
+        return {
+            connected: this.isConnected,
+            privacyMode: this.isPrivacyMode,
+            muted: this.isMicrophoneMuted,
+            speaking: this.isSpeaking,
+            activeSourcesCount: this.activeSources.size,
+            healthStatus: this.isConnected && (Date.now() - this.lastMessageTime > 30000) ? 'unresponsive' : 'healthy',
+        };
+    }
+
+    /**
+     * Internal base64 encoder.
+     */
+    arrayBufferToBase64(buffer) {
+        let binary = '';
+        const bytes = new Uint8Array(buffer);
+        for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+    }
+
+    /**
+     * Internal base64 decoder.
+     */
+    base64ToArrayBuffer(base64) {
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes.buffer;
+    }
+
+    /**
+     * Starts watchdog connectivity checker.
+     */
+    startWatchdog() {
+        if (this.watchdogTimer) return;
+
+        this.watchdogTimer = setInterval(() => {
+            if (this.isConnected && (Date.now() - this.lastMessageTime > 45000)) {
+                console.warn('[GeminiLiveService] Watchdog triggered - session inactive. Disconnecting.');
+                this.lastMessageTime = Date.now();
+                this.disconnect();
+            }
+        }, 15000);
+    }
+
+    stopWatchdog() {
+        if (this.watchdogTimer) {
+            clearInterval(this.watchdogTimer);
+            this.watchdogTimer = null;
+        }
+    }
 }
 
-// Export singleton instance
 const geminiLiveService = new GeminiLiveService();
 export default geminiLiveService;
 export { GeminiLiveService };

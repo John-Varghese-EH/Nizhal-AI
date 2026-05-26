@@ -1,8 +1,12 @@
 pub mod ai;
 pub mod env_mgmt;
+pub mod gateway;
+pub mod keyring;
 pub mod livekit;
 pub mod memory;
 pub mod persona;
 pub mod settings;
 pub mod system;
 pub mod window_mgmt;
+pub mod validation;
+pub mod ws_bridge;
