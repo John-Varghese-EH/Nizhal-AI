@@ -395,13 +395,14 @@ const SettingsView = ({
     ];
 
     const providerConfigs = [
+        { id: 'ollama', name: 'Ollama Local', desc: '100% Free local AI (http://127.0.0.1:11434) - No API Key needed', url: 'https://ollama.com' },
         { id: 'gemini', name: 'Google Gemini', desc: 'Sleek & Fast - Free tier active', url: 'https://aistudio.google.com/app/apikey' },
+        { id: 'groq', name: 'Groq Cloud', desc: 'Lightning fast open-source models - Free tier', url: 'https://console.groq.com/keys' },
         { id: 'openai', name: 'OpenAI', desc: 'GPT-4o standard models', url: 'https://platform.openai.com/api-keys' },
         { id: 'anthropic', name: 'Anthropic', desc: 'Claude models', url: 'https://console.anthropic.com/settings/keys' },
-        { id: 'groq', name: 'Groq Cloud', desc: 'Lightning fast open-source models', url: 'https://console.groq.com/keys' },
         { id: 'together', name: 'Together AI', desc: 'Serverless model repository', url: 'https://api.together.xyz' },
         { id: 'elevenlabs', name: 'ElevenLabs', desc: 'Hyper-realistic voice synthesis', url: 'https://elevenlabs.io' },
-        { id: 'custom', name: 'Custom LLM', desc: 'Connect to any OpenAI-compatible API', url: '#' },
+        { id: 'custom', name: 'Custom LLM / LM Studio', desc: 'Connect to LM Studio, vLLM, or any OpenAI-compatible API', url: '#' },
     ];
 
     return (
@@ -842,31 +843,54 @@ const SettingsView = ({
                                                         </div>
 
                                                         <div className="flex gap-2">
-                                                            {hasKey && (
+                                                            {config.id === 'ollama' ? (
                                                                 <button
-                                                                    onClick={() => handleDeleteApiKey(config.id)}
-                                                                    className="p-2 text-white/40 hover:text-red-400 bg-white/5 hover:bg-red-500/10 rounded-xl border border-white/5 transition-all"
-                                                                    title="Delete key"
+                                                                    onClick={() => handleProviderSelect('ollama')}
+                                                                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                                                                        providerStatus?.currentProvider === 'ollama'
+                                                                            ? 'bg-green-500/20 text-green-300 border border-green-500/30'
+                                                                            : 'bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/20'
+                                                                    }`}
                                                                 >
-                                                                    <Trash2 size={14} />
+                                                                    {providerStatus?.currentProvider === 'ollama' ? 'Active' : 'Use Ollama'}
                                                                 </button>
+                                                            ) : (
+                                                                <>
+                                                                    {hasKey && providerStatus?.currentProvider !== config.id && (
+                                                                        <button
+                                                                            onClick={() => handleProviderSelect(config.id)}
+                                                                            className="px-3.5 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/20 rounded-xl text-xs font-bold transition-all text-indigo-300"
+                                                                        >
+                                                                            Use {config.name}
+                                                                        </button>
+                                                                    )}
+                                                                    {hasKey && (
+                                                                        <button
+                                                                            onClick={() => handleDeleteApiKey(config.id)}
+                                                                            className="p-2 text-white/40 hover:text-red-400 bg-white/5 hover:bg-red-500/10 rounded-xl border border-white/5 transition-all"
+                                                                            title="Delete key"
+                                                                        >
+                                                                            <Trash2 size={14} />
+                                                                        </button>
+                                                                    )}
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            if (isEditing) {
+                                                                                setEditingKeyProvider(null);
+                                                                                setTempKeyValue('');
+                                                                            } else {
+                                                                                setEditingKeyProvider(config.id);
+                                                                                setTempKeyValue(apiKeys[config.id] || '');
+                                                                                // Reset validation
+                                                                                setValidationStatus(prev => ({ ...prev, [config.id]: 'idle' }));
+                                                                            }
+                                                                        }}
+                                                                        className="px-3.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-xs font-bold transition-all text-indigo-300"
+                                                                    >
+                                                                        {isEditing ? 'Cancel' : hasKey ? 'Edit Key' : 'Add Key'}
+                                                                    </button>
+                                                                </>
                                                             )}
-                                                            <button
-                                                                onClick={() => {
-                                                                    if (isEditing) {
-                                                                        setEditingKeyProvider(null);
-                                                                        setTempKeyValue('');
-                                                                    } else {
-                                                                        setEditingKeyProvider(config.id);
-                                                                        setTempKeyValue(apiKeys[config.id] || '');
-                                                                        // Reset validation
-                                                                        setValidationStatus(prev => ({ ...prev, [config.id]: 'idle' }));
-                                                                    }
-                                                                }}
-                                                                className="px-3.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-xs font-bold transition-all text-indigo-300"
-                                                            >
-                                                                {isEditing ? 'Cancel' : hasKey ? 'Edit Key' : 'Add Key'}
-                                                            </button>
                                                         </div>
                                                     </div>
 
