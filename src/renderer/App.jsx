@@ -12,7 +12,6 @@ import FirstRunBootloader from './components/FirstRunBootloader';
 const ChatView = lazy(() => import('./components/ChatView'));
 const SettingsView = lazy(() => import('./components/SettingsView'));
 const LifeView = lazy(() => import('./components/LifeView'));
-const SkinManager = lazy(() => import('./components/SkinManager'));
 const AndroidMirror = lazy(() => import('./components/AndroidMirror'));
 
 const App = () => {
@@ -135,25 +134,14 @@ const App = () => {
         };
     }, []);
 
-    // Sync character overlay window visibility dynamically based on full screen state
+    // Ensure companion window is created and visible
     useEffect(() => {
-        const syncCompanionWindow = async () => {
-            if (!window.nizhal?.character) return;
-            try {
-                if (windowMode === 'compact') {
-                    await window.nizhal.character.show();
-                } else {
-                    await window.nizhal.character.hide();
-                }
-            } catch (err) {
-                console.warn('[App] Failed to sync companion window state:', err);
-            }
-        };
-
-        if (!isLoading) {
-            syncCompanionWindow();
+        if (!isLoading && window.nizhal?.character?.show) {
+            window.nizhal.character.show().catch(err => {
+                console.warn('[App] Failed to show companion window:', err);
+            });
         }
-    }, [windowMode, isLoading]);
+    }, [isLoading]);
 
     const initializeApp = async () => {
         try {
@@ -183,15 +171,10 @@ const App = () => {
 
             if (!prefs?.onboardingComplete) setShowOnboarding(true);
 
-            // Launch transparent avatar window always, and sync initial state
+            // Launch transparent companion window always
             if (window.nizhal?.character?.create) {
                 await window.nizhal.character.create();
-                const isWide = window.innerWidth > 800;
-                if (isWide) {
-                    await window.nizhal.character.hide();
-                } else {
-                    await window.nizhal.character.show();
-                }
+                await window.nizhal.character.show();
             }
         } catch (error) {
             console.error('Failed to initialize:', error);
@@ -308,54 +291,21 @@ const App = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="h-full flex flex-col md:flex-row"
+                        className="h-full flex flex-col flex-1 bg-slate-950/20 backdrop-blur-md"
                     >
-                        {/* Avatar Layer - Only shown in Full Screen mode to keep compact view clean and spacious */}
-                        {!isCompact && (
-                            <div className="w-[320px] shrink-0 h-full z-10 border-r border-white/5 bg-slate-950/20 backdrop-blur-md">
-                                <div className="relative w-full h-full opacity-100 transition-opacity animate-fade-in">
-                                    <Suspense fallback={null}>
-                                        <ErrorBoundary name="VRM Avatar / Skin Manager" title="Avatar Rendering Stopped">
-                                            <SkinManager
-                                                personaId={activePersona?.id}
-                                                activeSkin={activePersona?.skin}
-                                                personalityState={{
-                                                    ...personalityState,
-                                                    isSpeaking,
-                                                    isThinking,
-                                                    isListening
-                                                }}
-                                                isActive={true}
-                                                showVideoAvatar={true}
-                                            />
-                                        </ErrorBoundary>
-                                    </Suspense>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Chat Interface */}
-                        <div className={`transition-all duration-500 flex flex-col z-20 ${
-                            isCompact 
-                                ? 'flex-1 bg-slate-950/40 backdrop-blur-xl h-full' 
-                                : isAvatarFocused
-                                    ? 'absolute right-6 bottom-6 w-[420px] h-[calc(100%-80px)] max-h-[620px] glass-panel rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/10'
-                                    : 'flex-1 bg-slate-950/20 backdrop-blur-md h-full'
-                        }`}>
-                            <Suspense fallback={<div className="h-full flex items-center justify-center">Loading Chat...</div>}>
-                                <ErrorBoundary name="Chat Interface" title="Conversational View Degraded">
-                                    <ChatView
-                                        persona={activePersona}
-                                        personalityState={personalityState}
-                                        onListeningChange={setIsListening}
-                                        onThinkingChange={setIsThinking}
-                                        onSpeakingChange={setIsSpeaking}
-                                        isAvatarFocused={isAvatarFocused}
-                                        setIsAvatarFocused={setIsAvatarFocused}
-                                    />
-                                </ErrorBoundary>
-                            </Suspense>
-                        </div>
+                        <Suspense fallback={<div className="h-full flex items-center justify-center">Loading Chat...</div>}>
+                            <ErrorBoundary name="Chat Interface" title="Conversational View Degraded">
+                                <ChatView
+                                    persona={activePersona}
+                                    personalityState={personalityState}
+                                    onListeningChange={setIsListening}
+                                    onThinkingChange={setIsThinking}
+                                    onSpeakingChange={setIsSpeaking}
+                                    isAvatarFocused={false}
+                                    setIsAvatarFocused={() => {}}
+                                />
+                            </ErrorBoundary>
+                        </Suspense>
                     </motion.div>
                 )}
 

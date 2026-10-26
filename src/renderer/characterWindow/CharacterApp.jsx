@@ -899,22 +899,19 @@ const CharacterApp = () => {
     // Quick action handler
     const handleQuickAction = useCallback((action) => {
         switch (action) {
+            case 'chat':
             case 'speak':
-                menuActions.showChat();
+            case 'focus':
+                window.nizhal?.invoke?.('show_chat_window');
+                break;
+            case 'customize':
+                setCustomizerOpen(true);
                 break;
             case 'dance':
                 toggleDance();
                 break;
-            case 'game':
-                handleGameToggle(true);
-                break;
             case 'wave':
-                // Trigger wave animation
                 expressionRef.current?.onEvent('happy');
-                break;
-            case 'focus':
-                // Open chat for focused interaction
-                menuActions.showChat();
                 break;
             default:
                 console.log('[CharacterApp] Unknown quick action:', action);

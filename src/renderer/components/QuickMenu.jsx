@@ -35,10 +35,10 @@ const EMOTIONS = [
 
 // Quick actions
 const QUICK_ACTIONS = [
-    { id: 'speak', icon: '🗣️', label: 'Speak' },
+    { id: 'chat', icon: '💬', label: 'Chat' },
+    { id: 'customize', icon: '🎨', label: 'Avatar' },
     { id: 'dance', icon: '💃', label: 'Dance' },
-    { id: 'game', icon: '🎮', label: 'Play' },
-    { id: 'focus', icon: '🎯', label: 'Focus' }
+    { id: 'wave', icon: '👋', label: 'Wave' }
 ];
 
 /**
