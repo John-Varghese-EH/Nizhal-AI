@@ -231,18 +231,28 @@ pub async fn create_character_window(
             WebviewUrl::App("character.html".into()),
         )
         .title("Nizhal Character")
+        .inner_size(380.0, 560.0)
         .decorations(false)
         .transparent(true)
         .always_on_top(true)
         .skip_taskbar(true)
-        .maximized(true)
+        .resizable(true)
         .shadow(false)
         .build();
 
         match build_result {
             Ok(character_window) => {
-                // Default to click-through for full screen overlay
-                let _ = character_window.set_ignore_cursor_events(true);
+                // Position at bottom-right of primary monitor by default
+                if let Ok(Some(monitor)) = app.primary_monitor() {
+                    let m_size = monitor.size();
+                    let m_pos = monitor.position();
+                    let win_w = 380;
+                    let win_h = 560;
+                    let margin = 24;
+                    let x = m_pos.x + (m_size.width as i32) - win_w - margin;
+                    let y = m_pos.y + (m_size.height as i32) - win_h - margin - 48;
+                    let _ = character_window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
+                }
                 Ok(())
             }
             Err(e) => {

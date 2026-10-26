@@ -114,8 +114,8 @@ const CharacterApp = () => {
     const [currentEmotion, setCurrentEmotion] = useState('neutral');
     const [uiSettings, setUiSettings] = useState({
         alwaysOnTop: true,
-        clickThrough: true,
-        transparency: 0.8
+        clickThrough: false,
+        transparency: 1.0
     });
 
     // Speech bubble state
@@ -131,7 +131,7 @@ const CharacterApp = () => {
     const [isDancing, setIsDancing] = useState(false);
     const [danceIntensity, setDanceIntensity] = useState(0);
     const [vrmLoaded, setVrmLoaded] = useState(false);
-    const [isClickThrough, setIsClickThrough] = useState(true);
+    const [isClickThrough, setIsClickThrough] = useState(false);
     const [isAltPressed, setIsAltPressed] = useState(false);
     const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
     const [windowReady, setWindowReady] = useState(false);
@@ -797,71 +797,27 @@ const CharacterApp = () => {
     }, [isScreensaver]);
 
     // Drag handlers — moves the 3D model WITHIN the full-screen canvas
+    // Native OS window drag handler
     const handleDragStart = useCallback((e) => {
         if (e.button !== 0) return;
+        if (e.target.closest('button, input, select, textarea, [role="button"], .speech-bubble, .menu-container')) {
+            return;
+        }
         setIsDragging(true);
         expressionRef.current?.setDragging(true);
         getAvatarStateController().setState(AvatarState.DRAGGING);
-        // Record starting mouse position and current character position
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        dragStartPos.current = { x: clientX, y: clientY };
-        dragStartCharPos.current = { ...characterPosition };
-    }, [characterPosition]);
+        window.nizhal?.window?.startDragging?.();
+    }, []);
 
-    const handleDrag = useCallback((e) => {
-        if (!isDragging) return;
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        const deltaX = clientX - dragStartPos.current.x;
-        const deltaY = clientY - dragStartPos.current.y;
-
-        const sWidth = windowSize.width || window.innerWidth;
-        const sHeight = windowSize.height || window.innerHeight;
-
-        const targetX = dragStartCharPos.current.x + deltaX;
-        const targetY = dragStartCharPos.current.y + deltaY;
-
-        // Keep 3D canvas strictly contained within the window viewport,
-        // allowing transparent margins to overflow just enough for visible model borders to reach screen limits.
-        const minX = -sWidth / 2 + 30 * localScaleOffset;
-        const maxX = sWidth / 2 - 30 * localScaleOffset;
-
-        // Vertically clamp to keep character grounded, allowing transparent padding to overflow just enough for head/feet to touch screen borders
-        const minY = -sHeight / 2 + 50 * localScaleOffset; // Allow top of canvas to go off-screen so head can touch top border
-        const maxY = sHeight / 2 - 50 * localScaleOffset; // Allow bottom of canvas to go off-screen so feet can touch bottom border
-
-        setCharacterPosition({
-            x: Math.max(minX, Math.min(maxX, targetX)),
-            y: Math.max(minY, Math.min(maxY, targetY))
-        });
-    }, [isDragging, windowSize, localScaleOffset]);
+    const handleDrag = useCallback(() => {
+        // OS native drag handles position tracking
+    }, []);
 
     const handleDragEnd = useCallback(() => {
-        if (!isDragging) return;
         setIsDragging(false);
         expressionRef.current?.setDragging(false);
-
-        // Check if character is near taskbar (bottom of screen)
-        const screenHeight = windowSize.height || window.innerHeight;
-        const taskbarThreshold = 100; // pixels from bottom
-        // characterPosition.y is offset from center; positive = downward
-        const feetY = (screenHeight / 2) + characterPosition.y;
-
-        if (feetY > screenHeight - taskbarThreshold) {
-            console.log('[CharacterApp] Near taskbar — entering sitting pose');
-            // Snap to exact taskbar edge
-            setCharacterPosition(prev => ({
-                ...prev,
-                y: (screenHeight / 2) - taskbarThreshold + 30
-            }));
-            getAvatarStateController().setState(AvatarState.SITTING_TASKBAR);
-            return;
-        }
-
-        // Return to idle
         getAvatarStateController().setState(AvatarState.IDLE);
-    }, [isDragging, characterPosition, windowSize]);
+    }, []);
 
     // Wheel resize handler
     const handleWheel = useCallback((e) => {
