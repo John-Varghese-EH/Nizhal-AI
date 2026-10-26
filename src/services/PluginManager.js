@@ -1,18 +1,8 @@
-// import { Web3Plugin } from '../plugins/web3/Web3Plugin.js';
-import { CTFPlugin } from '../plugins/ctf/CTFPlugin.js';
-import { SecurityPlugin } from '../plugins/security/SecurityPlugin.js';
-import { mobileServer } from './MobileServerService.js';
-
-// Competition Extensions
-import { AISecurityExtension } from '../extensions/ai-security/MalwareClassifier.js';
-import { OracleCloudExtension } from '../extensions/oracle-cloud/OCIManager.js';
-import { HackathonExtension } from '../extensions/hackathon/HackathonDashboard.js';
-import { AutomationExtension } from '../extensions/automation/WorkflowBuilder.js';
-import { EmotionalCompanionExtension } from '../extensions/emotional/EmotionalCompanion.js';
-
 /**
- * PluginManager - Handles loading and execution of Hacker Extensions
+ * PluginManager - Modular Extensibility Engine for Desktop Companion
+ * Provides safe registration and event bus dispatch for optional capabilities.
  */
+
 class PluginManager {
     constructor() {
         this.plugins = new Map();
@@ -22,82 +12,96 @@ class PluginManager {
 
     /**
      * Register a new plugin
-     * @param {Object} plugin - Plugin instance
+     * @param {Object} plugin - Plugin instance adhering to { name, version, commands?, onLoad?, onUnload? }
      */
     register(plugin) {
-        if (this.plugins.has(plugin.name)) {
-            console.warn(`Plugin ${plugin.name} already registered`);
+        if (!plugin || !plugin.name) {
+            console.warn('[PluginManager] Invalid plugin registered:', plugin);
             return;
         }
 
-        console.log(`[PluginManager] Registering ${plugin.name}...`);
+        if (this.plugins.has(plugin.name)) {
+            console.warn(`[PluginManager] Plugin ${plugin.name} already registered`);
+            return;
+        }
+
+        console.log(`[PluginManager] Registering plugin: ${plugin.name}`);
         this.plugins.set(plugin.name, plugin);
 
-        // Register commands
-        if (plugin.commands) {
+        if (Array.isArray(plugin.commands)) {
             for (const cmd of plugin.commands) {
-                // commands: [{ trigger: "audit", handler: "auditContract" }]
-                // Map trigger phrase to plugin handler
-                this.commands.set(cmd.trigger.toLowerCase(), {
-                    plugin: plugin.name,
-                    handler: cmd.handler
-                });
+                if (cmd.trigger && cmd.handler) {
+                    this.commands.set(cmd.trigger.toLowerCase(), {
+                        plugin: plugin.name,
+                        handler: cmd.handler
+                    });
+                }
             }
         }
 
-        if (plugin.onLoad) plugin.onLoad();
+        try {
+            if (typeof plugin.onLoad === 'function') {
+                plugin.onLoad();
+            }
+        } catch (err) {
+            console.error(`[PluginManager] Error loading plugin ${plugin.name}:`, err);
+        }
     }
 
     /**
-     * Initialize all plugins
+     * Unregister a plugin
+     */
+    unregister(pluginName) {
+        const plugin = this.plugins.get(pluginName);
+        if (!plugin) return;
+
+        try {
+            if (typeof plugin.onUnload === 'function') {
+                plugin.onUnload();
+            }
+        } catch (err) {
+            console.error(`[PluginManager] Error unloading plugin ${pluginName}:`, err);
+        }
+
+        // Clean up commands
+        for (const [trigger, cmd] of this.commands.entries()) {
+            if (cmd.plugin === pluginName) {
+                this.commands.delete(trigger);
+            }
+        }
+
+        this.plugins.delete(pluginName);
+        console.log(`[PluginManager] Unregistered plugin: ${pluginName}`);
+    }
+
+    /**
+     * Initialize built-in companion plugins
      */
     async initialize() {
         if (this.isLoaded) return;
-
-        console.log('[PluginManager] Initializing plugins...');
-
-        // Register Core Hacker Extensions
-        // this.register(Web3Plugin); // Disabled temporarily due to ethers dependency issue
-        this.register(CTFPlugin);
-        this.register(SecurityPlugin);
-
-        // Register Competition Extensions
-        this.register(AISecurityExtension);
-        this.register(OracleCloudExtension);
-        this.register(HackathonExtension);
-        this.register(AutomationExtension);
-
-        // Register Emotional Extension
-        this.register(EmotionalCompanionExtension);
-
-        // Initialize Mobile Sync
-        try {
-            mobileServer.start((text) => {
-                console.log(`[PluginManager] Mobile Command: ${text}`);
-                // In a future update, we can loop this back to main chat
-            });
-        } catch (e) {
-            console.error('[PluginManager] Failed to start mobile server:', e);
-        }
-
+        console.log('[PluginManager] Initializing companion plugins...');
         this.isLoaded = true;
     }
 
     /**
-     * Check if a text input matches a plugin command
-     * @param {string} text - User input
-     * @returns {Object|null} - Execution result or null
+     * Dispatch command trigger to registered plugin
+     * @param {string} text - User command or voice prompt
      */
     async executeCommand(text) {
-        const lowerText = text.toLowerCase();
+        if (!text || typeof text !== 'string') return null;
+        const lowerText = text.toLowerCase().trim();
 
-        // Simple keyword matching for now
-        for (const [trigger, cmd] of this.commands) {
-            if (lowerText.includes(trigger)) {
+        for (const [trigger, cmd] of this.commands.entries()) {
+            if (lowerText.startsWith(trigger) || lowerText.includes(trigger)) {
                 const plugin = this.plugins.get(cmd.plugin);
-                if (plugin && plugin[cmd.handler]) {
+                if (plugin && typeof plugin[cmd.handler] === 'function') {
                     console.log(`[PluginManager] Executing ${cmd.plugin}:${cmd.handler}`);
-                    return await plugin[cmd.handler](text); // Pass full text for context
+                    try {
+                        return await plugin[cmd.handler](text);
+                    } catch (err) {
+                        console.error(`[PluginManager] Command execution error:`, err);
+                        return null;
+                    }
                 }
             }
         }
@@ -106,13 +110,14 @@ class PluginManager {
     }
 
     /**
-     * Get status of all plugins
+     * Get active status of all plugins
      */
     getStatus() {
         const status = {};
         for (const [name, plugin] of this.plugins) {
             status[name] = {
                 active: true,
+                version: plugin.version || '1.0.0',
                 commands: plugin.commands?.length || 0
             };
         }
@@ -121,3 +126,4 @@ class PluginManager {
 }
 
 export const pluginManager = new PluginManager();
+export default pluginManager;

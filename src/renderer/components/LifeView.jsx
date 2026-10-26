@@ -4,7 +4,7 @@ import { lifeService } from '../../services/LifeService';
 import { weatherService } from '../../assistant/life-manager/Weather';
 import { calendarManager } from '../../assistant/life-manager/Calendar';
 import { familyService } from '../../assistant/family/FamilyService';
-import { fitnessService } from '../../services/FitnessService';
+
 import { visionManager } from '../../services/VisionEmotionManager';
 import SystemInfoPanel from './SystemInfoPanel';
 import TaskBoard from './TaskBoard';
@@ -55,7 +55,7 @@ const LifeView = () => {
                 lifeService.getMemories(),
                 lifeService.getArtifacts(),
                 lifeService.getRoutine(),
-                fitnessService.getDailyStats(),
+                Promise.resolve(null),
                 familyService.getMembers()
             ]);
 

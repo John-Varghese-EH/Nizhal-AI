@@ -11,9 +11,7 @@ import CharacterCustomizer from '../components/CharacterCustomizer';
 import SpeechBubble from '../components/avatar/SpeechBubble';
 import QuickMenu from '../components/QuickMenu';
 import ShareCard from '../components/ShareCard';
-import SettingsView from '../components/SettingsView';
-import TicTacToe from '../components/TicTacToe';
-import MobileAvatar2D from '../components/avatar/MobileAvatar2D';
+
 import AvatarWindow from '../../components/AvatarWindow';
 import { Platform } from '../../services/PlatformBridge';
 
@@ -1012,23 +1010,9 @@ const CharacterApp = () => {
             )}
 
             <div
-                className={`w-screen h-screen overflow-hidden select-none transition-opacity duration-300 ${isClickThrough && !isGameActive ? 'pointer-events-none' : 'pointer-events-auto'}`}
+                className={`w-screen h-screen overflow-hidden select-none transition-opacity duration-300 ${isClickThrough ? 'pointer-events-none' : 'pointer-events-auto'}`}
                 style={{ opacity: (!shouldUse3D || vrmLoaded || currentCharacter.type === 'hologram') ? (uiSettings.transparency ?? settings.characterOpacity ?? settings.opacity ?? 0.95) : 0 }}
             >
-                <AnimatePresence>
-                    {isGameActive && (
-                        <TicTacToe
-                            onClose={() => handleGameToggle(false)}
-                            onGameEnd={(winner) => {
-                                if (winner === 'X') {
-                                    expressionRef.current?.onEvent('sad'); // AI lost
-                                } else if (winner === 'O') {
-                                    expressionRef.current?.onEvent('happy'); // AI won
-                                }
-                            }}
-                        />
-                    )}
-                </AnimatePresence>
 
                 {/* SpeechBubble moved inside dynamic avatar model container below for perfect sticky & adaptive positioning */}
 

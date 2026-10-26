@@ -1,7 +1,7 @@
 {
   "name": "nizhal-ai",
   "version": "1.0.0",
-  "description": "A commercial-grade, multi-persona desktop companion with emotional intelligence",
+  "description": "A high-performance, lightweight, customizable desktop AI companion",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,19 +10,16 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "lint": "eslint src --ext .js,.jsx",
-    "setup": "node scripts/setup.js"
+    "lint": "eslint src --ext .js,.jsx"
   },
   "author": "Nizhal AI Team",
   "license": "MIT",
   "dependencies": {
     "@google/genai": "^1.34.0",
     "@google/generative-ai": "^0.21.0",
-    "@mlc-ai/web-llm": "^0.2.80",
     "@pixiv/three-vrm": "^3.4.4",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^8.17.10",
-    "@stripe/stripe-js": "^4.10.0",
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-clipboard-manager": "^2.2.1",
     "@tauri-apps/plugin-dialog": "^2.2.0",
@@ -31,9 +28,6 @@
     "@tauri-apps/plugin-opener": "^2.2.6",
     "@tauri-apps/plugin-shell": "^2.2.0",
     "@tauri-apps/plugin-store": "^2.2.0",
-    "@tensorflow-models/coco-ssd": "^2.2.3",
-    "@tensorflow/tfjs": "^4.22.0",
-    "ethers": "^6.16.0",
     "framer-motion": "^11.15.0",
     "html-to-image": "^1.11.13",
     "livekit-client": "^2.17.0",

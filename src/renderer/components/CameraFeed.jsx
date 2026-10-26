@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Camera, CameraOff, RefreshCw, AlertCircle, Box } from 'lucide-react';
 import cameraService from '../../services/CameraService';
-import { objectDetectionService } from '../../services/ObjectDetectionService';
+
 import { LocalVideoTrack } from 'livekit-client';
 import { livekitVoiceService } from '../services/LiveKitVoiceService';
 
@@ -101,27 +101,10 @@ const CameraFeed = ({
     }, [detections]);
 
     const startObjectDetection = async () => {
-        if (!videoRef.current) return;
-
-        console.log('[CameraFeed] Starting object detection...');
-        const loaded = await objectDetectionService.loadModel();
-
-        if (loaded && isMounted.current) {
-            setModelLoaded(true);
-            objectDetectionService.startDetection(
-                videoRef.current,
-                (detectionResults) => {
-                    if (isMounted.current) {
-                        setDetections(detectionResults);
-                    }
-                },
-                500 // Detect every 500ms
-            );
-        }
+        // Lightweight camera preview only - heavy TF models removed
     };
 
     const stopObjectDetection = () => {
-        objectDetectionService.stopDetection();
         setDetections([]);
     };
 
