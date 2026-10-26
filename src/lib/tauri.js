@@ -173,20 +173,35 @@ export const livekit = {
     updatePersonality: (personality) => invoke('livekit_start_agent', { personality }),
 };
 
-// ─── Voice (browser-side, no IPC needed) ────────────────────────────────
+// ─── Voice (browser-side, free high-performance speech) ────────────────
 export const voice = {
     speak: async (text, options) => {
+        if (!text) return;
         if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(text);
             if (options?.voice) utterance.voice = options.voice;
-            if (options?.rate) utterance.rate = options.rate;
-            if (options?.pitch) utterance.pitch = options.pitch;
+            if (options?.rate) utterance.rate = options.rate ?? 1.0;
+            if (options?.pitch) utterance.pitch = options.pitch ?? 1.0;
+
+            // Notify avatar window to show speech bubble and mouth animation
+            emit('avatar:speak', text);
+            emit('avatar:state', { isSpeaking: true });
+
+            utterance.onend = () => {
+                emit('avatar:state', { isSpeaking: false });
+            };
+            utterance.onerror = () => {
+                emit('avatar:state', { isSpeaking: false });
+            };
+
             window.speechSynthesis.speak(utterance);
         }
     },
     stop: async () => {
         if ('speechSynthesis' in window) {
             window.speechSynthesis.cancel();
+            emit('avatar:state', { isSpeaking: false });
         }
     },
     getVoices: async () => {

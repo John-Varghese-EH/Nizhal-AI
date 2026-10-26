@@ -308,6 +308,19 @@ export class VoiceRecognitionService {
         
         return errorMessages[error] || `Voice recognition error: ${error}`;
     }
+
+    startListening(options = {}) {
+        return this.start(options);
+    }
+
+    stopListening() {
+        return this.stop();
+    }
+
+    isSupported() {
+        return 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+    }
 }
 
-export default VoiceRecognitionService;
+export const voiceRecognition = new VoiceRecognitionService();
+export default voiceRecognition;

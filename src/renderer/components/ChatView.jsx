@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { LiveKitVoiceButton } from './LiveKitVoiceButton';
 import { livekitVoiceService } from '../services/LiveKitVoiceService';
+import { voiceRecognition } from '../../services/VoiceRecognitionService.js';
 
 // Premium syntax-highlighted code block component
 const CodeBlock = ({ code, language }) => {
@@ -189,9 +190,42 @@ const ChatView = ({
     const [cameraEnabled, setCameraEnabled] = useState(false);
     const [livekitRoom, setLivekitRoom] = useState(null);
     const [liveKitEmotion, setLiveKitEmotion] = useState(null);
+    const [isVoiceListening, setIsVoiceListening] = useState(false);
     
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
+
+    const handleVoiceToggle = useCallback(() => {
+        if (isVoiceListening) {
+            voiceRecognition.stopListening();
+            setIsVoiceListening(false);
+            onListeningChange?.(false);
+        } else {
+            voiceRecognition.onStart = () => {
+                setIsVoiceListening(true);
+                onListeningChange?.(true);
+            };
+            voiceRecognition.onResult = ({ transcript, isFinal }) => {
+                if (transcript) {
+                    setInputValue(transcript);
+                }
+                if (isFinal) {
+                    setIsVoiceListening(false);
+                    onListeningChange?.(false);
+                }
+            };
+            voiceRecognition.onError = (err) => {
+                console.warn('[ChatView] Voice recognition error:', err);
+                setIsVoiceListening(false);
+                onListeningChange?.(false);
+            };
+            voiceRecognition.onEnd = () => {
+                setIsVoiceListening(false);
+                onListeningChange?.(false);
+            };
+            voiceRecognition.startListening();
+        }
+    }, [isVoiceListening, onListeningChange]);
 
     // Subscribe to real-time emotion updates from voice agent
     useEffect(() => {
@@ -545,21 +579,18 @@ ${voiceStatus === 'connected' ? '✅ LiveKit connected' : '⚠️ LiveKit not co
                             className="flex-1 bg-transparent px-4 py-3 text-sm text-white placeholder-white/20 focus:outline-none transition-all disabled:opacity-50 resize-none max-h-32 min-h-[46px] leading-relaxed"
                         />
 
-                        {/* Inline Voice connection button */}
+                        {/* 100% Free Web Speech STT Voice Button */}
                         <button
                             type="button"
-                            onClick={() => {
-                                const btn = document.querySelector('.livekit-voice-controls button');
-                                if (btn) btn.click();
-                            }}
+                            onClick={handleVoiceToggle}
                             className={`p-3 rounded-xl transition-all duration-300 active:scale-90 ${
-                                voiceStatus === 'connected'
-                                    ? 'bg-green-500/15 text-green-400 border border-green-500/25 shadow-[0_0_12px_rgba(74,222,128,0.15)] animate-pulse'
+                                isVoiceListening
+                                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.3)] animate-pulse'
                                     : 'text-white/40 hover:bg-white/5 hover:text-white/80'
                             }`}
-                            title={voiceStatus === 'connected' ? 'Voice Active' : 'Start Voice Session'}
+                            title={isVoiceListening ? 'Listening... (Click to stop)' : 'Click to Speak'}
                         >
-                            {voiceStatus === 'connected' ? <Mic size={16} /> : <MicOff size={16} />}
+                            {isVoiceListening ? <Mic size={16} /> : <MicOff size={16} />}
                         </button>
 
                         {/* Submit button */}
