@@ -13,6 +13,7 @@ import QuickMenu from '../components/QuickMenu';
 import ShareCard from '../components/ShareCard';
 
 import AvatarWindow from '../../components/AvatarWindow';
+import SettingsView from '../components/SettingsView';
 import { Platform } from '../../services/PlatformBridge';
 
 import { useTheme } from '../hooks/useTheme';
@@ -144,18 +145,49 @@ const CharacterApp = () => {
     const previousWindowSize = useRef(null);
     const isPositionInitialized = useRef(false);
 
-    const dragStartPos = useRef({ x: 0, y: 0 });
-    const dragStartCharPos = useRef({ x: 0, y: 0 });
     const danceServiceRef = useRef(null);
     const expressionRef = useRef(null);
     const particleRef = useRef(null);
+    const [customCharacters, setCustomCharacters] = useState([]);
 
-    // File drop handling
+    // Combined characters list (built-in + user imported VRMs)
+    const allCharacters = useMemo(() => [
+        ...customCharacters,
+        ...AVAILABLE_CHARACTERS
+    ], [customCharacters]);
+
+    // File drop handling - supports direct .vrm avatar loading & general file processing
     const handleFileDrop = useCallback((files) => {
         if (files.length > 0) {
+            const firstFile = files[0];
+            const isVrm = firstFile.name?.toLowerCase().endsWith('.vrm');
+
+            if (isVrm && firstFile.file) {
+                try {
+                    const objectUrl = URL.createObjectURL(firstFile.file);
+                    const customCharId = `custom_${Date.now()}`;
+                    const customCharName = firstFile.name.replace(/\.vrm$/i, '');
+                    const newChar = {
+                        id: customCharId,
+                        name: `⭐ ${customCharName}`,
+                        type: 'vrm',
+                        model: objectUrl
+                    };
+
+                    setCustomCharacters(prev => [newChar, ...prev]);
+                    setSettings(prev => ({ ...prev, character: customCharId }));
+                    setSpeechMessage(`Loaded your custom avatar: ${customCharName}!`);
+                    setIsSpeechVisible(true);
+                    particleRef.current?.burst('heart', window.innerWidth / 2, window.innerHeight / 2, 20);
+                    return;
+                } catch (err) {
+                    console.error('Failed to load dropped VRM file:', err);
+                }
+            }
+
             const description = getFileDescription(files);
             const message = `Processing your file: ${description}`;
-            setSpeechText(message);
+            setSpeechMessage(message);
             setIsSpeechVisible(true);
             particleRef.current?.burst('spark', window.innerWidth / 2, window.innerHeight / 2, 10);
 
@@ -217,8 +249,8 @@ const CharacterApp = () => {
 
     // Get current character
     const currentCharacter = useMemo(() =>
-        AVAILABLE_CHARACTERS.find(c => c.id === settings.character) || AVAILABLE_CHARACTERS[0],
-        [settings.character]
+        allCharacters.find(c => c.id === settings.character) || allCharacters[0],
+        [allCharacters, settings.character]
     );
 
     // Reset loaded state when character model changes to guarantee smooth transitions
@@ -466,11 +498,11 @@ const CharacterApp = () => {
         };
     }, []);
 
-    // Alt key detection for click-through toggle
-    // By default, window is click-through. Hold Alt to interact.
+    // Desktop Companion Direct Interaction
+    // Default to direct interactivity for a responsive desktop companion overlay.
     useEffect(() => {
-        // Enable click-through on mount
-        window.nizhal?.character?.setClickThrough?.(true);
+        // Direct interaction enabled on mount
+        window.nizhal?.character?.setClickThrough?.(false);
 
         // Init window sitting service
         windowSittingService.initialize().then(() => {
@@ -546,7 +578,7 @@ const CharacterApp = () => {
             if (altKeyDown) {
                 altKeyDown = false;
                 setIsAltPressed(false);
-                if (!contextMenuOpen && !customizerOpen && !isDragging) {
+                if (uiSettings.clickThrough && !contextMenuOpen && !customizerOpen && !isDragging) {
                     setIsClickThrough(true);
                     window.nizhal?.character?.setClickThrough?.(true);
                     console.log('[CharacterApp] Alt released - click-through enabled');
@@ -576,9 +608,9 @@ const CharacterApp = () => {
             }
         };
 
-        // When mouse leaves window, reset to non-interactive (safety)
+        // When mouse leaves window, reset to click-through only if user explicitly enabled click-through lock
         const handleMouseLeave = () => {
-            if (!contextMenuOpen && !customizerOpen && !isDragging) {
+            if (uiSettings.clickThrough && !contextMenuOpen && !customizerOpen && !isDragging) {
                 disableInteraction();
             }
         };
@@ -616,7 +648,7 @@ const CharacterApp = () => {
             clearInterval(complementTimer);
             clearInterval(pollInterval);
         };
-    }, [contextMenuOpen, customizerOpen, isDragging]);
+    }, [contextMenuOpen, customizerOpen, isDragging, uiSettings.clickThrough]);
 
     // Game logic
     const handleGameToggle = useCallback(async (enable) => {
@@ -1191,6 +1223,15 @@ const CharacterApp = () => {
                         </div>
                     )}
                 </AnimatePresence>
+
+                {/* Character Customizer */}
+                <CharacterCustomizer
+                    isOpen={customizerOpen}
+                    onClose={() => setCustomizerOpen(false)}
+                    settings={settings}
+                    onSettingsChange={setSettings}
+                    availableCharacters={allCharacters}
+                />
 
                 {/* Viral Share Card */}
                 <ShareCard

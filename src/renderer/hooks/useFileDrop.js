@@ -39,7 +39,8 @@ export const useFileDrop = (onFileDrop) => {
                 name: file.name,
                 size: file.size,
                 type: file.type,
-                path: file.path // Native backend provides full path
+                path: file.path, // Native backend provides full path if available
+                file // Native browser File object
             }));
             onFileDrop(fileInfo);
         }

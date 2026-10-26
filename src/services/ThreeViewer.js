@@ -253,9 +253,22 @@ export class ThreeCanvasController {
     }
 
     startLoop() {
+        let lastRenderTime = 0;
         const render = (time) => {
             this.animationFrameId = requestAnimationFrame(render);
             
+            // Green Engine: Dynamic FPS throttling
+            // Idle target: ~20-25fps (~40-50ms between frames) to conserve CPU/GPU
+            // Active target: 60fps (immediate render)
+            const isIdle = !this.vrm?.expressionManager?.getValue?.('aa') && 
+                           (!this.animationService || this.animationService.currentState === 'idle');
+            const targetInterval = isIdle ? 45 : 0; // ~22 FPS when idling, 60 FPS when active
+
+            if (targetInterval > 0 && time - lastRenderTime < targetInterval) {
+                return;
+            }
+            lastRenderTime = time;
+
             const delta = this.clock.getDelta();
             
             // FPS Diagnostics tracking
