@@ -322,9 +322,16 @@ const ChatView = ({
                     timestamp: Date.now()
                 }]);
 
+                const assistantText = response.response || response.text || '';
+                
+                // Mirror speech bubble to floating desktop companion
+                if (window.nizhal?.emit && assistantText) {
+                    window.nizhal.emit('avatar:speak', assistantText);
+                }
+
                 const prefs = await window.nizhal?.memory.getUserPreferences();
                 if (prefs?.voiceEnabled) {
-                    await window.nizhal?.voice.speak(response.response || response.text);
+                    await window.nizhal?.voice.speak(assistantText);
                 }
             } else {
                 setMessages(prev => [...prev, {
