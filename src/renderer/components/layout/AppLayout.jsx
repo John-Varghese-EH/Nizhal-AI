@@ -135,29 +135,38 @@ const AppLayout = ({
                 )}
             </div>
 
-            <nav className={`flex-1 space-y-1.5 transition-all duration-300 ${isSidebarCollapsed ? 'px-2' : 'px-4'}`}>
-                {navItems.map(item => (
-                    <button
-                        key={item.id}
-                        onClick={() => onTabChange(item.id)}
-                        className={`w-full flex items-center rounded-2xl transition-all duration-300 group ${
-                            isSidebarCollapsed ? 'justify-center p-3.5' : 'gap-4 px-5 py-3.5 hover:translate-x-1'
-                        } ${activeTab === item.id
-                            ? 'bg-gradient-to-r from-cyan-500/15 to-transparent text-cyan-400 border border-cyan-500/20 shadow-[inset_0_0_20px_rgba(6,182,212,0.05)]'
-                            : 'text-slate-500 hover:bg-white/5 hover:text-white/90'
-                        }`}
-                        title={isSidebarCollapsed ? item.label : undefined}
-                    >
-                        <item.icon size={20} className={`transition-transform duration-300 ${activeTab === item.id ? 'scale-110' : 'group-hover:scale-110'}`} />
-                        {!isSidebarCollapsed && <span className="font-medium tracking-wide">{item.label}</span>}
-                        {!isSidebarCollapsed && activeTab === item.id && (
-                            <motion.div
-                                layoutId="active-pill"
-                                className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.8)]"
+            <nav className={`flex-1 space-y-2 transition-all duration-300 ${isSidebarCollapsed ? 'px-2' : 'px-3.5'}`}>
+                {navItems.map(item => {
+                    const isActive = activeTab === item.id;
+                    return (
+                        <button
+                            key={item.id}
+                            onClick={() => onTabChange(item.id)}
+                            className={`w-full flex items-center rounded-xl transition-all duration-200 active:scale-[0.97] group relative ${
+                                isSidebarCollapsed ? 'justify-center p-3' : 'gap-3.5 px-4 py-3'
+                            } ${isActive
+                                ? 'bg-cyan-500/10 text-cyan-300 font-semibold border border-cyan-500/25 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1),0_0_20px_rgba(6,182,212,0.12)]'
+                                : 'text-slate-400 hover:text-white hover:bg-white/[0.04] border border-transparent'
+                            }`}
+                            title={isSidebarCollapsed ? item.label : undefined}
+                        >
+                            <item.icon 
+                                size={18} 
+                                className={`transition-transform duration-200 ${isActive ? 'scale-110 text-cyan-400' : 'group-hover:scale-105 text-slate-400 group-hover:text-white'}`} 
                             />
-                        )}
-                    </button>
-                ))}
+                            {!isSidebarCollapsed && (
+                                <span className="text-xs tracking-wider uppercase font-medium">{item.label}</span>
+                            )}
+                            {!isSidebarCollapsed && isActive && (
+                                <motion.div
+                                    layoutId="active-pill"
+                                    transition={{ type: 'spring', stiffness: 350, damping: 28 }}
+                                    className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.9)]"
+                                />
+                            )}
+                        </button>
+                    );
+                })}
             </nav>
 
             <div className={`border-t border-white/5 bg-black/20 backdrop-blur-md transition-all duration-300 ${isSidebarCollapsed ? 'p-3 space-y-4' : 'p-5 space-y-3'}`}>

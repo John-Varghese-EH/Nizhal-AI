@@ -29,7 +29,7 @@ export default {
                 border: 'var(--border-color)'
             },
             fontFamily: {
-                sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                sans: ['Plus Jakarta Sans', 'system-ui', '-apple-system', 'sans-serif'],
                 mono: ['JetBrains Mono', 'Fira Code', 'monospace']
             },
             animation: {

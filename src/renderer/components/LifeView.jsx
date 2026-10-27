@@ -108,18 +108,22 @@ const LifeView = () => {
 
     /* --- Sub-Components --- */
 
-    const TabButton = ({ id, label, icon }) => (
-        <button
-            onClick={() => setActiveTab(id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${activeTab === id
-                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                : 'text-white/40 hover:text-white hover:bg-white/5'
+    const TabButton = ({ id, label, icon }) => {
+        const isActive = activeTab === id;
+        return (
+            <button
+                onClick={() => setActiveTab(id)}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all duration-200 active:scale-95 relative ${
+                    isActive
+                        ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.15)]'
+                        : 'text-slate-400 hover:text-white hover:bg-white/[0.04] border border-transparent'
                 }`}
-        >
-            <span>{icon}</span>
-            <span className="font-medium">{label}</span>
-        </button>
-    );
+            >
+                <span className="text-sm">{icon}</span>
+                <span>{label}</span>
+            </button>
+        );
+    };
 
     if (loading && !lifeData.weather) {
         return (
@@ -128,7 +132,7 @@ const LifeView = () => {
                     <div className="loading-shimmer h-8 w-48 mb-6 rounded-lg" />
                     <div className="flex gap-2 pb-1">
                         {[1, 2, 3, 4, 5, 6].map(i => (
-                            <div key={i} className="loading-shimmer h-10 w-24 rounded-xl" />
+                            <div key={i} className="loading-shimmer h-8 w-24 rounded-xl" />
                         ))}
                     </div>
                 </div>
@@ -150,10 +154,13 @@ const LifeView = () => {
         >
             {/* Header / Tabs */}
             <div className="p-6 pb-2">
-                <h2 className="text-2xl font-light mb-6 text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-white">
-                    Life Manager
-                </h2>
-                <div className="flex gap-2 border-b border-white/5 pb-1">
+                <div className="flex items-center gap-2.5 mb-5">
+                    <div className="w-1.5 h-4 bg-cyan-400 rounded-full shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
+                    <h2 className="text-xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-cyan-100 to-slate-300">
+                        Life & Routine
+                    </h2>
+                </div>
+                <div className="flex gap-1.5 border-b border-white/5 pb-2 overflow-x-auto no-scrollbar">
                     <TabButton id="dashboard" label="Dashboard" icon="📊" />
                     <TabButton id="tasks" label="Tasks" icon="📋" />
                     <TabButton id="identity" label="Identity" icon="🆔" />
@@ -176,56 +183,62 @@ const LifeView = () => {
                             exit={{ opacity: 0, x: 10 }}
                             className="grid grid-cols-1 lg:grid-cols-2 gap-6"
                         >
-                            {/* Weather Card */}
-                            <div className="p-6 rounded-3xl bg-gradient-to-br from-white/5 to-white/0 border border-white/10 shadow-xl relative overflow-hidden group">
-                                {lifeData.weather ? (
-                                    <>
-                                        <div className="flex justify-between items-start mb-6">
+                            {/* Weather Card - Double-Bezel nested architecture */}
+                            <div className="p-1 rounded-3xl bg-white/[0.03] ring-1 ring-white/10 shadow-xl">
+                                <div className="p-6 rounded-[calc(1.5rem-4px)] bg-gradient-to-br from-white/[0.04] to-black/40 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)] relative overflow-hidden group">
+                                    {lifeData.weather ? (
+                                        <>
+                                            <div className="flex justify-between items-start mb-6">
+                                                <div>
+                                                    <span className="text-[10px] font-mono tracking-widest uppercase text-cyan-400 font-semibold px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20">
+                                                        Real-time Weather
+                                                    </span>
+                                                    <h3 className="text-4xl font-extrabold tracking-tight text-white mt-2 font-mono">
+                                                        {tempUnit === 'F' ? Math.round(lifeData.weather.temp * 9 / 5 + 32) : lifeData.weather.temp}°{tempUnit}
+                                                    </h3>
+                                                    <p className="text-cyan-300 text-xs font-medium capitalize mt-1 tracking-wide">
+                                                        {lifeData.weather.description}
+                                                    </p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-sm font-semibold tracking-wide text-white">{lifeData.weather.city}</p>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Humidity</span>
+                                                    <span className="text-base text-white font-mono font-medium">{lifeData.weather.humidity}%</span>
+                                                </div>
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Wind</span>
+                                                    <span className="text-base text-white font-mono font-medium">{lifeData.weather.wind} km/h</span>
+                                                </div>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="h-full min-h-[140px] flex flex-col items-center justify-center text-center gap-3">
+                                            <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center text-lg">🌤️</div>
                                             <div>
-                                                <h3 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
-                                                    {tempUnit === 'F' ? Math.round(lifeData.weather.temp * 9 / 5 + 32) : lifeData.weather.temp}°{tempUnit}
-                                                </h3>
-                                                <p className="text-cyan-400 font-medium capitalize mt-1">
-                                                    {lifeData.weather.description}
-                                                </p>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-lg font-medium text-white">{lifeData.weather.city}</p>
+                                                <p className="text-xs font-semibold text-white/80">No Weather Data</p>
+                                                <p className="text-[11px] text-white/40 mt-0.5">Configure your city in Settings to sync local forecast.</p>
                                             </div>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
-                                            <div className="flex flex-col gap-1">
-                                                <span className="text-xs text-slate-500 uppercase">Humidity</span>
-                                                <span className="text-lg text-white font-light">{lifeData.weather.humidity}%</span>
-                                            </div>
-                                            <div className="flex flex-col gap-1">
-                                                <span className="text-xs text-slate-500 uppercase">Wind</span>
-                                                <span className="text-lg text-white font-light">{lifeData.weather.wind} km/h</span>
-                                            </div>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="h-full flex flex-col items-center justify-center text-center gap-3">
-                                        <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center text-xl">🌤️</div>
-                                        <div>
-                                            <p className="text-sm font-medium text-white/70">No Weather Data</p>
-                                            <p className="text-xs text-white/40 mt-1">Set your location in Settings to see local weather.</p>
-                                        </div>
-                                    </div>
-                                )}
+                                    )}
+                                </div>
                             </div>
 
-                            {/* Calendar Card */}
-                            <div className="p-6 rounded-3xl bg-gradient-to-br from-white/5 to-white/0 border border-white/10 shadow-xl">
-                                <h3 className="text-lg font-medium mb-4 flex items-center gap-2 text-white">
-                                    <span className="text-purple-400">📅</span> Upcoming Events
-                                </h3>
-                                <div className="space-y-3">
-                                    {lifeData.events.length > 0 ? (
-                                        lifeData.events.map((event, i) => (
-                                            <div key={event.id} className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/5">
-                                                <div className={`w-1.5 h-10 rounded-full ${event.type === 'work' ? 'bg-cyan-400' :
-                                                    event.type === 'personal' ? 'bg-purple-400' : 'bg-green-400'
+                            {/* Calendar Card - Double-Bezel nested architecture */}
+                            <div className="p-1 rounded-3xl bg-white/[0.03] ring-1 ring-white/10 shadow-xl">
+                                <div className="p-6 rounded-[calc(1.5rem-4px)] bg-gradient-to-br from-white/[0.04] to-black/40 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
+                                    <h3 className="text-xs font-bold uppercase tracking-wider mb-4 flex items-center gap-2 text-white">
+                                        <span className="text-purple-400">📅</span> Upcoming Schedule
+                                    </h3>
+                                    <div className="space-y-2.5">
+                                        {lifeData.events.length > 0 ? (
+                                            lifeData.events.map((event, i) => (
+                                                <div key={event.id} className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.03] border border-white/5 hover:border-white/10 transition-colors">
+                                                    <div className={`w-1 h-8 rounded-full ${event.type === 'work' ? 'bg-cyan-400' :
+                                                        event.type === 'personal' ? 'bg-purple-400' : 'bg-emerald-400'
                                                     }`} />
                                                 <div className="flex-1">
                                                     <p className="font-medium text-white">{event.title}</p>
@@ -242,6 +255,7 @@ const LifeView = () => {
                                     )}
                                 </div>
                             </div>
+                        </div>
 
                             {/* Routine Overview */}
                             {lifeData.routine && (

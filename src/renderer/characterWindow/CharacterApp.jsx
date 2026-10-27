@@ -1124,20 +1124,25 @@ const CharacterApp = () => {
 
                 {/* SpeechBubble moved inside dynamic avatar model container below for perfect sticky & adaptive positioning */}
 
-                {/* Alt-Key Interactive UI Controls */}
+                {/* Alt-Key Interactive UI Controls (Awwwards double-bezel design) */}
                 <AnimatePresence>
                     {isAltPressed && (
                         <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: 20 }}
-                            className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-50 flex items-center gap-4 p-3 rounded-2xl bg-slate-900/80 backdrop-blur-md border border-slate-700 pointer-events-auto"
+                            initial={{ opacity: 0, y: 15, scale: 0.94 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 15, scale: 0.94 }}
+                            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+                            className="absolute bottom-20 left-1/2 transform -translate-x-1/2 z-50 pointer-events-auto p-1 rounded-3xl bg-white/[0.04] ring-1 ring-white/10 shadow-[0_16px_40px_rgba(0,0,0,0.6)] backdrop-blur-2xl"
                         >
-                            <div className="flex flex-col items-center">
-                                <span className="text-xs text-slate-400 font-bold mb-1 uppercase tracking-wider">Scroll to Resize • Drag to Move</span>
-                                <div className="flex gap-2">
+                            <div className="flex flex-col items-center px-4 py-3 rounded-[calc(1.5rem-4px)] bg-black/75 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
+                                <span className="text-[10px] text-cyan-300/80 font-mono font-semibold mb-2.5 uppercase tracking-widest flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                                    Scroll: Scale • Drag: Move
+                                </span>
+                                
+                                <div className="flex items-center gap-1.5">
                                     <button 
-                                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-medium transition-colors border border-slate-600 focus:outline-none"
+                                        className="px-3 py-1.5 bg-white/10 hover:bg-white/15 active:scale-95 text-white rounded-xl text-xs font-semibold tracking-wide transition-all border border-white/10"
                                         onClick={(e) => { 
                                             e.stopPropagation(); 
                                             const scales = [0.8, 1.0, 1.25, 1.5, 2.0];
@@ -1147,23 +1152,20 @@ const CharacterApp = () => {
                                         }}
                                         title={`Current Scale: ${localScaleOffset.toFixed(2)}x`}
                                     >
-                                        Resize
+                                        Scale: {localScaleOffset.toFixed(1)}x
                                     </button>
-
-                                </div>
-                                <div className="flex gap-2 mt-2">
                                     <button 
-                                        className="px-3 py-1.5 bg-pink-500/80 hover:bg-pink-500 text-white rounded-lg text-xs font-medium transition-colors border border-pink-400 focus:outline-none"
+                                        className="px-3 py-1.5 bg-pink-500/15 hover:bg-pink-500/25 active:scale-95 text-pink-300 rounded-xl text-xs font-semibold tracking-wide transition-all border border-pink-500/25"
                                         onClick={(e) => { e.stopPropagation(); expressionRef.current?.onEvent('happy'); }}
-                                    >👋 Wave</button>
+                                    >Wave</button>
                                     <button 
-                                        className="px-3 py-1.5 bg-purple-500/80 hover:bg-purple-500 text-white rounded-lg text-xs font-medium transition-colors border border-purple-400 focus:outline-none"
+                                        className="px-3 py-1.5 bg-purple-500/15 hover:bg-purple-500/25 active:scale-95 text-purple-300 rounded-xl text-xs font-semibold tracking-wide transition-all border border-purple-500/25"
                                         onClick={(e) => { e.stopPropagation(); toggleDance(); }}
-                                    >🎵 Dance</button>
+                                    >Dance</button>
                                     <button 
-                                        className="px-3 py-1.5 bg-blue-500/80 hover:bg-blue-500 text-white rounded-lg text-xs font-medium transition-colors border border-blue-400 focus:outline-none"
+                                        className="px-3 py-1.5 bg-cyan-500/15 hover:bg-cyan-500/25 active:scale-95 text-cyan-300 rounded-xl text-xs font-semibold tracking-wide transition-all border border-cyan-500/25"
                                         onClick={(e) => { e.stopPropagation(); getAvatarStateController().setState(AvatarState.SLEEPING); }}
-                                    >💤 Sleep</button>
+                                    >Sleep</button>
                                 </div>
                             </div>
                         </motion.div>

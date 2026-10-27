@@ -571,48 +571,54 @@ ${voiceStatus === 'connected' ? '✅ LiveKit connected' : '⚠️ LiveKit not co
                 />
             </div>
 
-            {/* Premium Redesigned Input Panel */}
+            {/* Premium Double-Bezel Input Panel */}
             <div className="p-4 border-t border-white/5 bg-slate-950/40 backdrop-blur-xl relative z-10">
                 <form onSubmit={handleSubmit}>
-                    <div className="relative flex items-center gap-2 p-1.5 bg-black/40 border border-white/10 rounded-2xl focus-within:border-cyan-500/35 focus-within:shadow-[0_0_20px_rgba(6,182,212,0.12)] transition-all">
-                        <textarea
-                            ref={inputRef}
-                            value={inputValue}
-                            onChange={(e) => setInputValue(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            placeholder={inputValue.startsWith('/') ? 'Type /help for commands' : `Message ${persona?.name || 'AI'}...`}
-                            disabled={isLoading}
-                            rows={1}
-                            className="flex-1 bg-transparent px-4 py-3 text-sm text-white placeholder-white/20 focus:outline-none transition-all disabled:opacity-50 resize-none max-h-32 min-h-[46px] leading-relaxed"
-                        />
+                    {/* Outer Shell */}
+                    <div className="p-1 rounded-2xl bg-white/[0.03] ring-1 ring-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.4)] focus-within:ring-cyan-500/40 focus-within:shadow-[0_0_24px_rgba(6,182,212,0.15)] transition-all">
+                        {/* Inner Core */}
+                        <div className="relative flex items-center gap-2 p-1 bg-black/60 rounded-[calc(1rem-2px)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.06)]">
+                            <textarea
+                                ref={inputRef}
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
+                                onKeyDown={handleKeyDown}
+                                placeholder={inputValue.startsWith('/') ? 'Type /help for commands' : `Message ${persona?.name || 'AI'}...`}
+                                disabled={isLoading}
+                                rows={1}
+                                className="flex-1 bg-transparent px-3.5 py-2.5 text-xs text-white placeholder-white/25 focus:outline-none transition-all disabled:opacity-50 resize-none max-h-32 min-h-[42px] leading-relaxed"
+                            />
 
-                        {/* 100% Free Web Speech STT Voice Button */}
-                        <button
-                            type="button"
-                            onClick={handleVoiceToggle}
-                            className={`p-3 rounded-xl transition-all duration-300 active:scale-90 ${
-                                isVoiceListening
-                                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.3)] animate-pulse'
-                                    : 'text-white/40 hover:bg-white/5 hover:text-white/80'
-                            }`}
-                            title={isVoiceListening ? 'Listening... (Click to stop)' : 'Click to Speak'}
-                        >
-                            {isVoiceListening ? <Mic size={16} /> : <MicOff size={16} />}
-                        </button>
+                            {/* 100% Free Web Speech STT Voice Button */}
+                            <button
+                                type="button"
+                                onClick={handleVoiceToggle}
+                                className={`p-2.5 rounded-xl transition-all duration-200 active:scale-95 ${
+                                    isVoiceListening
+                                        ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.3)] animate-pulse'
+                                        : 'text-white/40 hover:bg-white/10 hover:text-white'
+                                }`}
+                                title={isVoiceListening ? 'Listening... (Click to stop)' : 'Click to Speak'}
+                            >
+                                {isVoiceListening ? <Mic size={15} /> : <MicOff size={15} />}
+                            </button>
 
-                        {/* Submit button */}
-                        <motion.button
-                            type="submit"
-                            disabled={isLoading || !inputValue.trim()}
-                            whileTap={{ scale: 0.93 }}
-                            className="p-3 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 disabled:from-white/5 disabled:to-white/5 rounded-xl transition-all disabled:cursor-not-allowed shrink-0 shadow-md shadow-cyan-500/10 hover:shadow-cyan-500/20 active:scale-95"
-                        >
-                            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                                />
-                            </svg>
-                        </motion.button>
+                            {/* Tactile Button-in-Button Submit Action */}
+                            <motion.button
+                                type="submit"
+                                disabled={isLoading || !inputValue.trim()}
+                                whileTap={{ scale: 0.94 }}
+                                className="p-2.5 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 disabled:from-white/5 disabled:to-white/5 rounded-xl transition-all disabled:cursor-not-allowed shrink-0 shadow-md shadow-cyan-500/10 hover:shadow-cyan-500/20 active:scale-95 group"
+                            >
+                                <div className="w-4 h-4 flex items-center justify-center transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5">
+                                    <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                            d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                                        />
+                                    </svg>
+                                </div>
+                            </motion.button>
+                        </div>
                     </div>
 
                     {/* Premium shortcut instruction text */}
