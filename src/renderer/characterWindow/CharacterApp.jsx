@@ -779,19 +779,64 @@ const CharacterApp = () => {
             return () => window.removeEventListener('click', handleClick);
         }
     }, [contextMenuOpen, isAltPressed, isDragging]);
+    // Cute interactive Avatar Click with dynamic reactions
+    const lastClickTimeRef = useRef(0);
+    const handleAvatarClick = useCallback((e) => {
+        const now = Date.now();
+        const timeSinceLast = now - lastClickTimeRef.current;
+        lastClickTimeRef.current = now;
 
-    // Avatar click
-    const handleAvatarClick = useCallback(() => {
-        if (isScreensaver) {
-            // Wake up if clicked in screensaver
-            window.nizhal?.invoke?.('show_chat_window'); // Or just wake up
-            // Main process should handle the click and restore too?
-            // Actually the click might not propagate if window is clickthrough but we enable interaction?
-            // For now, assume it works.
-        } else {
+        // Double click: open chat hub window
+        if (timeSinceLast < 320) {
             window.nizhal?.invoke?.('show_chat_window');
+            return;
         }
-    }, [isScreensaver]);
+
+        // Single click: cute reactive poke / pet reaction based on persona!
+        if (personalityMode === 'gf') {
+            const cuteReactions = [
+                "Ehehe, that tickles! 💕",
+                "Yes, babe? I'm right here with you! 🥰",
+                "Boop! Working hard today? ✨",
+                "I believe in you! Keep going! 💖"
+            ];
+            const reaction = cuteReactions[Math.floor(Math.random() * cuteReactions.length)];
+            setSpeechMessage(reaction);
+            setIsSpeechVisible(true);
+            expressionRef.current?.onEvent('happy');
+            particleRef.current?.burst('heart', window.innerWidth / 2, window.innerHeight / 2, 12);
+        } else if (personalityMode === 'bf') {
+            const cuteReactions = [
+                "I got your back, champ! Let's crush this. 💪",
+                "Need a break, bro? Hydrate up! ⚡",
+                "You're doing great, king. Keep pushing! 🔥",
+                "Right beside you, let's win this today. 👊"
+            ];
+            const reaction = cuteReactions[Math.floor(Math.random() * cuteReactions.length)];
+            setSpeechMessage(reaction);
+            setIsSpeechVisible(true);
+            expressionRef.current?.onEvent('happy');
+            particleRef.current?.burst('spark', window.innerWidth / 2, window.innerHeight / 2, 12);
+        } else if (personalityMode === 'jarvis') {
+            const jarvisReactions = [
+                "All systems operational, Sir. At your command. ⚙️",
+                "Subsystems nominal. Ready for your input, Boss. 🛡️",
+                "Telemetry check complete. How may I assist you today, Sir?",
+                "Standing by for next directive. 📊"
+            ];
+            const reaction = jarvisReactions[Math.floor(Math.random() * jarvisReactions.length)];
+            setSpeechMessage(reaction);
+            setIsSpeechVisible(true);
+            expressionRef.current?.onEvent('thinking');
+            particleRef.current?.burst('spark', window.innerWidth / 2, window.innerHeight / 2, 8);
+        } else {
+            // Default friendly poke
+            expressionRef.current?.onEvent('happy');
+            setSpeechMessage("Hello! Double click me to chat! ✨");
+            setIsSpeechVisible(true);
+            particleRef.current?.burst('spark', window.innerWidth / 2, window.innerHeight / 2, 8);
+        }
+    }, [personalityMode]);
 
     // Initialize Surprise Service
     useEffect(() => {
