@@ -318,6 +318,29 @@ pub async fn set_character_position(
 }
 
 #[tauri::command]
+pub async fn move_character_by(
+    app: tauri::AppHandle,
+    delta_x: i32,
+    delta_y: i32,
+) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        if let Some(window) = app.get_webview_window("character") {
+            let current = window.outer_position().map_err(|e| e.to_string())?;
+            window
+                .set_position(tauri::Position::Physical(tauri::PhysicalPosition { 
+                    x: current.x + delta_x, 
+                    y: current.y + delta_y 
+                }))
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    #[cfg(not(desktop))]
+    { let _ = (app, delta_x, delta_y); }
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn set_character_size(
     app: tauri::AppHandle,
     width: u32,

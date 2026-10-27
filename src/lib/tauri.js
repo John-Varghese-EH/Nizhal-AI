@@ -118,8 +118,8 @@ export const windowControls = {
         }
     },
     hideChat: () => invoke('hide_chat_window'),
-    getState: () => invoke('get_window_state'),
-    moveCharacter: (deltaX, deltaY) => invoke('set_character_position', { x: deltaX, y: deltaY }),
+    moveCharacter: (x, y) => invoke('set_character_position', { x, y }),
+    moveCharacterBy: (deltaX, deltaY) => invoke('move_character_by', { deltaX: Math.round(deltaX), deltaY: Math.round(deltaY) }),
     startDragging: () => getCurrentWebviewWindow().startDragging(),
     toggleDetection: async () => true,
     getCharacterPosition: () => invoke('get_character_position'),

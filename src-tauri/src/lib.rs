@@ -118,6 +118,7 @@ pub fn run() {
             window_mgmt::show_character_window,
             window_mgmt::hide_character_window,
             window_mgmt::set_character_position,
+            window_mgmt::move_character_by,
             window_mgmt::set_character_size,
             window_mgmt::snap_character,
             window_mgmt::get_character_position,

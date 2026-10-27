@@ -907,27 +907,48 @@ const CharacterApp = () => {
         };
     }, [isScreensaver]);
 
-    // Drag handlers — moves the 3D model WITHIN the full-screen canvas
-    // Native OS window drag handler
+    // Drag handlers — Moves the OS companion window when dragged (or with Alt+Drag)
+    const dragOriginRef = useRef({ screenX: 0, screenY: 0 });
+    const isDraggingRef = useRef(false);
+
     const handleDragStart = useCallback((e) => {
         if (e.button !== 0) return;
         if (e.target.closest('button, input, select, textarea, [role="button"], .speech-bubble, .menu-container')) {
             return;
         }
+
+        isDraggingRef.current = true;
+        dragOriginRef.current = { screenX: e.screenX, screenY: e.screenY };
         setIsDragging(true);
         expressionRef.current?.setDragging(true);
         getAvatarStateController().setState(AvatarState.DRAGGING);
-        window.nizhal?.window?.startDragging?.();
+
+        // Native Tauri window dragging: moves the OS window smoothly on Wayland/X11/Windows
+        try {
+            window.nizhal?.window?.startDragging?.();
+        } catch (err) {
+            console.warn('[CharacterApp] Native startDragging failed, relying on fallback delta drag:', err);
+        }
     }, []);
 
-    const handleDrag = useCallback(() => {
-        // OS native drag handles position tracking
+    const handleDrag = useCallback((e) => {
+        if (!isDraggingRef.current) return;
+        // Pointer delta fallback for compositors that do not support native startDragging
+        const deltaX = e.screenX - dragOriginRef.current.screenX;
+        const deltaY = e.screenY - dragOriginRef.current.screenY;
+        if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
+            dragOriginRef.current = { screenX: e.screenX, screenY: e.screenY };
+            window.nizhal?.window?.moveCharacterBy?.(deltaX, deltaY);
+        }
     }, []);
 
     const handleDragEnd = useCallback(() => {
-        setIsDragging(false);
-        expressionRef.current?.setDragging(false);
-        getAvatarStateController().setState(AvatarState.IDLE);
+        if (isDraggingRef.current) {
+            isDraggingRef.current = false;
+            setIsDragging(false);
+            expressionRef.current?.setDragging(false);
+            getAvatarStateController().setState(AvatarState.IDLE);
+        }
     }, []);
 
     // Wheel resize handler
