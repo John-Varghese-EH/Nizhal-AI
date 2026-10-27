@@ -1040,8 +1040,7 @@ const CharacterApp = () => {
             )}
 
             <div
-                className={`w-screen h-screen overflow-hidden select-none transition-opacity duration-300 ${isClickThrough ? 'pointer-events-none' : 'pointer-events-auto'}`}
-                style={{ opacity: (!shouldUse3D || vrmLoaded || currentCharacter.type === 'hologram') ? (uiSettings.transparency ?? settings.characterOpacity ?? settings.opacity ?? 0.95) : 0 }}
+                className={`w-screen h-screen overflow-hidden select-none bg-transparent ${isClickThrough ? 'pointer-events-none' : 'pointer-events-auto'}`}
             >
 
                 {/* SpeechBubble moved inside dynamic avatar model container below for perfect sticky & adaptive positioning */}
@@ -1131,16 +1130,7 @@ const CharacterApp = () => {
                     {/* HIGH/MEDIUM TIER: Robust Hardened Three.js VRM Viewport */}
                     {shouldUse3D && (
                         <div 
-                            className="block"
-                            style={{
-                                width: 420 * localScaleOffset,
-                                height: 560 * localScaleOffset,
-                                pointerEvents: 'auto',
-                                position: 'absolute',
-                                top: '50%',
-                                left: '50%',
-                                transform: `translate(calc(-50% + ${characterPosition.x}px), calc(-50% + ${characterPosition.y}px))`
-                            }}
+                            className="absolute inset-0 w-full h-full pointer-events-auto"
                         >
                             <AvatarWindow
                                 modelUrl={currentCharacter.model}
@@ -1161,7 +1151,7 @@ const CharacterApp = () => {
                     {/* Dance indicator */}
                     {isDancing && (
                         <motion.div
-                            className="absolute -top-4 left-1/2 -translate-x-1/2 text-lg"
+                            className="absolute -top-4 left-1/2 -translate-x-1/2 text-lg pointer-events-none"
                             animate={{ scale: [1, 1.2, 1] }}
                             transition={{ repeat: Infinity, duration: 0.5 }}
                         >
@@ -1169,17 +1159,6 @@ const CharacterApp = () => {
                         </motion.div>
                     )}
                 </motion.div>
-
-                {/* Drag indicator */}
-                {
-                    isDragging && (
-                        <motion.div
-                            className="absolute inset-0 border-2 border-dashed border-white/30 rounded-xl pointer-events-none"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                        />
-                    )
-                }
 
                 {/* Desktop Alt key indicator - shows interaction hint */}
                 {

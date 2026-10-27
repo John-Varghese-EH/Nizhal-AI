@@ -50,12 +50,13 @@ export class ThreeCanvasController {
             canvas: this.canvas,
             alpha: true,
             antialias: true,
-            preserveDrawingBuffer: true,
+            preserveDrawingBuffer: false,
             powerPreference: 'high-performance'
         });
         this.renderer.setSize(width, height, false);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.setClearColor(0x000000, 0.0);
+        this.renderer.autoClear = true;
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
