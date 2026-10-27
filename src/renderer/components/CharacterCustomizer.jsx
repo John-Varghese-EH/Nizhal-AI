@@ -169,6 +169,11 @@ const CharacterCustomizer = ({
                                     value={settings.autoBlink ?? true}
                                     onChange={(v) => handleChange('autoBlink', v)}
                                 />
+                                <ToggleSetting
+                                    label="Clipboard Assistant"
+                                    value={settings.enableClipboardReactions ?? true}
+                                    onChange={(v) => handleChange('enableClipboardReactions', v)}
+                                />
 
                                 <div className="pt-2 border-t border-white/10">
                                     <SliderSetting

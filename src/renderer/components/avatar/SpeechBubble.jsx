@@ -10,6 +10,7 @@ const SpeechBubble = ({
     message,
     isVisible,
     onClose,
+    onClick,
     duration = 5000,
     variant = 'default',
     customPlacement = null,
@@ -262,7 +263,14 @@ const SpeechBubble = ({
                         ...activeLayout.style
                     }}
                 >
-                    <div className="bg-slate-950/90 backdrop-blur-xl px-4 py-2.5 rounded-2xl border border-cyan-500/30 text-cyan-100 shadow-[0_0_25px_rgba(6,182,212,0.25)] text-xs font-semibold tracking-wide leading-relaxed relative pointer-events-auto">
+                    <div 
+                        onClick={(e) => {
+                            if (e.target.tagName !== 'BUTTON') {
+                                onClick?.();
+                            }
+                        }}
+                        className="bg-slate-950/90 backdrop-blur-xl px-4 py-2.5 rounded-2xl border border-cyan-500/30 text-cyan-100 shadow-[0_0_25px_rgba(6,182,212,0.25)] text-xs font-semibold tracking-wide leading-relaxed relative pointer-events-auto cursor-pointer hover:border-cyan-400/60 transition-colors"
+                    >
                         {/* Sci-fi tech corner frames */}
                         <div className={`absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 ${activeTheme.accent} rounded-tl-md`} />
                         <div className={`absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 ${activeTheme.accent} rounded-tr-md`} />

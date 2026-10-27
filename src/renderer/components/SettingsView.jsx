@@ -5,10 +5,12 @@ import LegalDocumentViewer from './LegalDocumentViewer';
 import { 
     Key, Eye, EyeOff, Lock, Plus, Trash2, Edit2, Save, X, RefreshCw,
     Settings, Sliders, Volume2, User, KeyRound, Monitor, Terminal, 
-    HelpCircle, Check, AlertCircle, Loader2, Cpu, HardDrive, Shield 
+    HelpCircle, Check, AlertCircle, Loader2, Cpu, HardDrive, Shield,
+    Download, Upload, Sparkles
 } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 import { SettingsService } from '../services/SettingsService';
+import { personalityMarketplace } from '../../services/PersonalityMarketplace';
 
 const SettingsView = ({ 
     onBack, 
@@ -90,16 +92,17 @@ const SettingsView = ({
     const loadSettings = async () => {
         try {
             const prefs = await window.nizhal?.memory.getUserPreferences();
-            const allPersonas = await window.nizhal?.persona.getAll();
-            const active = await window.nizhal?.persona.getActive();
-            const providers = await window.nizhal?.ai.getProviders();
-            const status = await window.nizhal?.ai.getProviderStatus();
-            const models = await window.nizhal?.ai.getModels();
-            const monitors = await window.nizhal?.windowControls?.getMonitors?.();
-            const envVars = await window.nizhal?.env?.getAll();
+            const allPersonas = await window.nizhal?.persona.getAll() || [];
+            const marketplacePersonas = personalityMarketplace.getAllPersonalities();
+            const combinedMap = new Map();
+            allPersonas.forEach(p => combinedMap.set(p.id, p));
+            marketplacePersonas.forEach(p => {
+                if (!combinedMap.has(p.id)) combinedMap.set(p.id, p);
+            });
+            const mergedPersonas = Array.from(combinedMap.values());
 
             setPreferences(prefs || {});
-            setPersonas(allPersonas || []);
+            setPersonas(mergedPersonas);
             setActivePersonaId(active?.id || 'jarvis');
             setAiProviders(providers || []);
             setProviderStatus(status || {});
@@ -163,6 +166,30 @@ const SettingsView = ({
         } catch (error) {
             console.error('Failed to switch persona:', error);
             toast.error('Failed to switch persona');
+        }
+    };
+
+    const handleImportCard = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const res = await personalityMarketplace.importCard(file);
+        if (res.success) {
+            toast.success(`Imported character card: ${res.persona.displayName || res.persona.name}!`);
+            await loadSettings();
+            await handlePersonaSwitch(res.persona.id);
+        } else {
+            toast.error(`Import failed: ${res.message}`);
+        }
+        e.target.value = '';
+    };
+
+    const handleExportCard = () => {
+        const success = personalityMarketplace.downloadPersonaCard(activePersonaId);
+        if (success) {
+            toast.success('Exported Tavern V2 character card JSON!');
+        } else {
+            toast.error('Failed to export character card');
         }
     };
 
@@ -485,7 +512,33 @@ const SettingsView = ({
 
                                 {/* Active Persona Section */}
                                 <div className="space-y-3">
-                                    <label className="text-xs font-semibold text-white/50 tracking-wider uppercase block">Active AI Persona</label>
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5">
+                                            <Sparkles size={14} className="text-cyan-400" />
+                                            <label className="text-xs font-semibold text-white/70 tracking-wider uppercase">Active AI Persona & Tavern Studio</label>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <label className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white rounded-lg text-xs font-medium cursor-pointer transition-colors border border-white/10">
+                                                <Upload size={12} className="text-cyan-400" />
+                                                <span>Import Card</span>
+                                                <input
+                                                    type="file"
+                                                    accept=".json,.png"
+                                                    onChange={handleImportCard}
+                                                    className="hidden"
+                                                />
+                                            </label>
+                                            <button
+                                                onClick={handleExportCard}
+                                                className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white rounded-lg text-xs font-medium transition-colors border border-white/10"
+                                                title="Export current persona as Tavern V2 JSON"
+                                            >
+                                                <Download size={12} className="text-indigo-400" />
+                                                <span>Export</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                         {personas.map((persona) => (
                                             <motion.button
@@ -501,19 +554,23 @@ const SettingsView = ({
                                             >
                                                 <span className="text-xl">
                                                     {persona.id === 'jarvis' && '🤖'}
+                                                    {persona.id === 'aldina' && '💖'}
+                                                    {persona.id === 'riku' && '🛡️'}
+                                                    {persona.id === 'elsa' && '❄️'}
+                                                    {persona.id === 'miku' && '🎵'}
+                                                    {persona.id === 'nahida' && '🌿'}
                                                     {persona.id === 'kavya' && '✨'}
-                                                    {persona.id === 'arjun' && '🛡️'}
+                                                    {persona.id === 'arjun' && '💪'}
                                                     {persona.id === 'naruto' && '🦊'}
                                                     {persona.id === 'goku' && '🐉'}
-                                                    {persona.id === 'elsa' && '❄️'}
                                                     {persona.id === 'tamil_nanban' && '🎭'}
                                                     {persona.id === 'telugu_sneham' && '🤝'}
                                                     {persona.id === 'hindi_dost' && '🕺'}
-                                                    {['jarvis','kavya','arjun','naruto','goku','elsa','tamil_nanban','telugu_sneham','hindi_dost'].indexOf(persona.id) === -1 && '👤'}
+                                                    {['jarvis','aldina','riku','elsa','miku','nahida','kavya','arjun','naruto','goku','tamil_nanban','telugu_sneham','hindi_dost'].indexOf(persona.id) === -1 && '👤'}
                                                 </span>
                                                 <div className="min-w-0">
-                                                    <div className="text-xs font-bold truncate text-white">{persona.name}</div>
-                                                    <div className="text-[10px] opacity-60 truncate">Language: {persona.language || 'en'}</div>
+                                                    <div className="text-xs font-bold truncate text-white">{persona.displayName || persona.name}</div>
+                                                    <div className="text-[10px] opacity-60 truncate">{persona.tagline || (persona.isImported ? 'Tavern Card' : 'Companion')}</div>
                                                 </div>
                                             </motion.button>
                                         ))}

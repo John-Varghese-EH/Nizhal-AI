@@ -1,24 +1,22 @@
+import { v4 as uuidv4 } from 'uuid';
+import { tavernCardService } from './TavernCardService';
+
 // Browser-compatible persistent store
 class LocalStore {
     constructor({ name }) { this.prefix = name; }
     has(key) { return localStorage.getItem(`${this.prefix}:${key}`) !== null; }
-    get(key) { try { return JSON.parse(localStorage.getItem(`${this.prefix}:${key}`)); } catch { return null; } }
+    get(key) { try { return JSON.parse(localStorage.getItem(`${this.prefix}:${key}`)) || []; } catch { return []; } }
     set(key, value) { localStorage.setItem(`${this.prefix}:${key}`, JSON.stringify(value)); }
 }
-import { v4 as uuidv4 } from 'uuid';
 
 /**
- * PersonalityMarketplace - Export/Import custom personalities
+ * PersonalityMarketplace & Persona Studio Service
  * 
- * Features:
- * - Export: Package personality settings + prompts as JSON
- * - Import: Load community personalities
- * - Share: Generate shareable links
+ * Manages rich character personas adhering to Tavern V2 character card specifications.
  */
 export class PersonalityMarketplace {
     constructor() {
         this.store = new LocalStore({ name: 'nizhal-personalities' });
-
         this.initialize();
     }
 
@@ -32,109 +30,128 @@ export class PersonalityMarketplace {
     }
 
     /**
-     * Export current personality as shareable package
+     * Import a character from a Tavern Card JSON string, object, or File (JSON or PNG)
      */
-    exportPersonality(name, settings) {
-        const personality = {
-            id: uuidv4(),
-            name,
-            version: '1.0',
-            createdAt: new Date().toISOString(),
-            author: 'Nizhal User',
-            settings: {
-                mode: settings.personalityMode || 'gf',
-                systemPrompt: settings.customPrompt || null,
-                voiceId: settings.voiceId || null,
-                theme: settings.theme || null,
-                traits: settings.traits || []
-            },
-            metadata: {
-                downloads: 0,
-                rating: 0
-            }
-        };
-
-        // Store locally
-        const customs = this.store.get('custom');
-        customs.push(personality);
-        this.store.set('custom', customs);
-
-        return personality;
-    }
-
-    /**
-     * Import a personality from JSON data
-     */
-    importPersonality(jsonData) {
+    async importCard(input) {
         try {
-            const personality = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
-
-            // Validate required fields
-            if (!personality.id || !personality.name || !personality.settings) {
-                throw new Error('Invalid personality format');
-            }
-
+            const card = await tavernCardService.parseCard(input);
             const imported = this.store.get('imported');
 
-            // Check for duplicates
-            if (imported.some(p => p.id === personality.id)) {
-                console.log('[Marketplace] Personality already imported');
-                return { success: false, message: 'Already imported' };
+            // Unique ID guarantee
+            const existingIdx = imported.findIndex(p => p.id === card.id);
+            const newPersona = {
+                ...card,
+                importedAt: new Date().toISOString(),
+                isImported: true
+            };
+
+            if (existingIdx !== -1) {
+                imported[existingIdx] = newPersona;
+            } else {
+                imported.push(newPersona);
             }
 
-            personality.importedAt = new Date().toISOString();
-            imported.push(personality);
             this.store.set('imported', imported);
-
-            return { success: true, personality };
+            console.log('[PersonaStudio] Successfully imported card:', card.displayName || card.name);
+            return { success: true, persona: newPersona };
         } catch (error) {
-            console.error('[Marketplace] Import failed:', error);
+            console.error('[PersonaStudio] Import failed:', error);
             return { success: false, message: error.message };
         }
     }
 
     /**
-     * Get all available personalities (built-in + custom + imported)
+     * Export any persona to Tavern V2 compliant JSON
+     */
+    exportCard(personaId) {
+        const all = this.getAllPersonalities();
+        const target = all.find(p => p.id === personaId);
+        if (!target) return null;
+
+        return tavernCardService.exportToTavernV2(target);
+    }
+
+    /**
+     * Create and save a custom persona
+     */
+    createCustomPersona(data) {
+        const id = data.id || `custom_${Date.now()}`;
+        const newPersona = {
+            id,
+            name: data.name || 'Custom Mate',
+            displayName: data.displayName || data.name || 'Custom Mate',
+            description: data.description || '',
+            personality: data.personality || data.description || '',
+            firstMessage: data.firstMessage || 'Hello! I am ready to hang out.',
+            systemPrompt: data.systemPrompt || '',
+            model: data.model || '/assets/models/11_Aldina.vrm',
+            type: data.type || 'vrm',
+            voiceSettings: data.voiceSettings || { pitch: 1.0, rate: 1.0 },
+            isCustom: true,
+            createdAt: new Date().toISOString()
+        };
+
+        const customs = this.store.get('custom');
+        const existingIdx = customs.findIndex(p => p.id === id);
+        if (existingIdx !== -1) {
+            customs[existingIdx] = newPersona;
+        } else {
+            customs.push(newPersona);
+        }
+
+        this.store.set('custom', customs);
+        return newPersona;
+    }
+
+    /**
+     * Retrieve all available personalities (Tavern Builtins + Custom + Imported)
      */
     getAllPersonalities() {
-        const builtIn = [
-            { id: 'gf', name: 'Girlfriend', author: 'Nizhal AI', isBuiltIn: true },
-            { id: 'bf', name: 'Boyfriend', author: 'Nizhal AI', isBuiltIn: true },
-            { id: 'jarvis', name: 'JARVIS', author: 'Nizhal AI', isBuiltIn: true }
-        ];
+        const builtins = tavernCardService.getBuiltinPersonas().map(p => ({
+            ...p,
+            isBuiltIn: true
+        }));
 
         const custom = this.store.get('custom').map(p => ({ ...p, isCustom: true }));
         const imported = this.store.get('imported').map(p => ({ ...p, isImported: true }));
 
-        return [...builtIn, ...custom, ...imported];
+        return [...builtins, ...custom, ...imported];
     }
 
     /**
-     * Delete a custom or imported personality
+     * Delete a custom or imported persona
      */
-    deletePersonality(id, type = 'custom') {
-        const key = type === 'custom' ? 'custom' : 'imported';
-        const list = this.store.get(key);
-        const filtered = list.filter(p => p.id !== id);
-        this.store.set(key, filtered);
+    deletePersona(id) {
+        let list = this.store.get('custom');
+        let filtered = list.filter(p => p.id !== id);
+        this.store.set('custom', filtered);
+
+        list = this.store.get('imported');
+        filtered = list.filter(p => p.id !== id);
+        this.store.set('imported', filtered);
+
         return true;
     }
 
     /**
-     * Generate shareable JSON string
+     * Download persona as .json file directly in browser
      */
-    generateShareableJSON(personalityId) {
-        const all = [...this.store.get('custom'), ...this.store.get('imported')];
-        const personality = all.find(p => p.id === personalityId);
+    downloadPersonaCard(personaId) {
+        const cardV2 = this.exportCard(personaId);
+        if (!cardV2) return false;
 
-        if (!personality) return null;
-
-        // Remove local-only fields
-        const shareable = { ...personality };
-        delete shareable.importedAt;
-
-        return JSON.stringify(shareable, null, 2);
+        const blob = new Blob([JSON.stringify(cardV2, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${cardV2.data.name.toLowerCase().replace(/\s+/g, '_')}_card.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        return true;
     }
 }
 
 export const personalityMarketplace = new PersonalityMarketplace();
+export default personalityMarketplace;

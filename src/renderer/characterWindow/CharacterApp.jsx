@@ -18,6 +18,7 @@ import { Platform } from '../../services/PlatformBridge';
 
 import { useTheme } from '../hooks/useTheme';
 import { useFileDrop, getFileDescription } from '../hooks/useFileDrop';
+import { clipboardWatcherService } from '../../services/ClipboardWatcherService';
 import '../styles/glass.css';
 
 
@@ -85,6 +86,7 @@ const CharacterApp = () => {
         enableGravity: false,
         mouseTracking: true,
         autoBlink: true,
+        enableClipboardReactions: true,
         personalityLevel: 2 // Default to Friendly
     });
 
@@ -354,6 +356,48 @@ const CharacterApp = () => {
             window.removeEventListener('nizhal-emotion', handleLocalEmotion);
         };
     }, []);
+
+    // Proactive Desktop Clipboard Reactions
+    useEffect(() => {
+        if (!settings.enableClipboardReactions) return;
+
+        clipboardWatcherService.start(2000);
+        let lastNotifiedText = '';
+        const unsubClipboard = clipboardWatcherService.subscribe((content, type) => {
+            if (!content || content.trim().length < 5 || content === lastNotifiedText) return;
+            lastNotifiedText = content;
+
+            let reaction = '';
+            let emotion = 'thinking';
+
+            if (type === 'code') {
+                reaction = '💡 I see you copied code! Click me if you want me to explain or debug it.';
+                emotion = 'thinking';
+            } else if (type === 'url') {
+                reaction = '🌐 Copied a link! Click me for a quick summary.';
+                emotion = 'happy';
+            } else if (type === 'json') {
+                reaction = '📦 Copied JSON! Want me to validate or format it?';
+                emotion = 'thinking';
+            } else if (content.length > 100) {
+                reaction = '📋 Copied notes! Click me if you want me to polish or summarize this!';
+                emotion = 'happy';
+            }
+
+            if (reaction) {
+                setSpeechMessage(reaction);
+                setSpeechVariant('default');
+                setIsSpeechVisible(true);
+                setCurrentEmotion(emotion);
+                expressionRef.current?.onEvent(emotion);
+            }
+        });
+
+        return () => {
+            unsubClipboard?.();
+            clipboardWatcherService.stop();
+        };
+    }, [settings.enableClipboardReactions]);
 
     // Track window size for responsive VRM scaling
     useEffect(() => {
@@ -1133,6 +1177,7 @@ const CharacterApp = () => {
                                 variant={speechVariant}
                                 isVisible={isSpeechVisible}
                                 onClose={() => setIsSpeechVisible(false)}
+                                onClick={() => window.nizhal?.invoke?.('show_chat_window')}
                                 scale={localScaleOffset}
                             />
                         </div>
