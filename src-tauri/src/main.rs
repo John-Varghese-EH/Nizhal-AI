@@ -5,12 +5,11 @@ fn main() {
     #[cfg(target_os = "linux")]
     {
         // Fix for WebKitGTK transparency and composite buffer rendering on Wayland compositors (Niri, Hyprland, Sway)
-        // Ensures WebKitGTK visual channel uses an alpha channel without DMABUF buffer corruption or opaque solid backings
+        // WEBKIT_DISABLE_DMABUF_RENDERER avoids driver buffer sync collisions
+        // Note: Do NOT disable compositing mode (WEBKIT_DISABLE_COMPOSITING_MODE=1) because disabling GPU compositing
+        // triggers CPU software fallback (Cairo SHM surfaces) which does not clear transparent damage rects, producing ghosting trails.
         if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-        }
-        if std::env::var("WEBKIT_DISABLE_COMPOSITING_MODE").is_err() {
-            std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
         }
     }
 

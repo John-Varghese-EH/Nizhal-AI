@@ -69,21 +69,36 @@ export class ThreeCanvasController {
         const width = this.container.clientWidth || 300;
         const height = this.container.clientHeight || 400;
 
-        // Renderer
-        this.renderer = new THREE.WebGLRenderer({
-            canvas: this.canvas,
+        // Renderer configuration hardened for transparent WebKitGTK Wayland compositors:
+        // 1. preserveDrawingBuffer: true forces WebKitGTK to retain and accurately composite the current frame
+        //    instead of presenting undefined previous backbuffer contents (which causes visual trails/ghosting).
+        // 2. premultipliedAlpha: false ensures WebKit compositing blends straight RGBA without double-premultiplying alpha.
+        const glContext = this.canvas.getContext('webgl2', {
             alpha: true,
             antialias: true,
-            preserveDrawingBuffer: false,
+            preserveDrawingBuffer: true,
+            premultipliedAlpha: false,
+            powerPreference: 'high-performance'
+        }) || this.canvas.getContext('webgl', {
+            alpha: true,
+            antialias: true,
+            preserveDrawingBuffer: true,
+            premultipliedAlpha: false,
+            powerPreference: 'high-performance'
+        });
+
+        this.renderer = new THREE.WebGLRenderer({
+            canvas: this.canvas,
+            context: glContext,
+            alpha: true,
+            antialias: true,
+            preserveDrawingBuffer: true,
             powerPreference: 'high-performance'
         });
         this.renderer.setSize(width, height, false);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.setClearColor(0x000000, 0.0);
-        this.renderer.autoClear = true;
-        this.renderer.autoClearColor = true;
-        this.renderer.autoClearDepth = true;
-        this.renderer.autoClearStencil = true;
+        this.renderer.autoClear = false; // Manual clean clearing in render loop
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
