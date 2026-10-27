@@ -20,17 +20,7 @@ import { useTheme } from '../hooks/useTheme';
 import { useFileDrop, getFileDescription } from '../hooks/useFileDrop';
 import '../styles/glass.css';
 
-// Conditionally import Three.js stack — only loaded on HIGH/MEDIUM tier devices
-// This saves ~800KB+ of JS on low-end mobile devices
-let Canvas, extend, THREE;
-try {
-    const fiber = await import('@react-three/fiber');
-    Canvas = fiber.Canvas;
-    extend = fiber.extend;
-    THREE = await import('three');
-} catch (e) {
-    console.warn('[CharacterApp] Three.js not available, using 2D fallback');
-}
+
 
 // Lazy-load heavy 3D components only when needed
 const OptimizedVRMModel = lazy(() =>
@@ -66,7 +56,7 @@ const CharacterApp = () => {
     const [deviceTier, setDeviceTier] = useState('medium');
     const [platformReady, setPlatformReady] = useState(false);
     const isMobile = Platform.isMobile();
-    const shouldUse3D = Canvas && (deviceTier === 'high' || deviceTier === 'medium');
+    const shouldUse3D = !isMobile || (typeof window !== 'undefined' && deviceTier !== 'low');
 
     // Initialize platform detection on mount
     useEffect(() => {
@@ -1093,9 +1083,9 @@ const CharacterApp = () => {
 
                 <motion.div
                     className="relative interactive cursor-pointer w-full h-full flex items-center justify-center"
-                    initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ type: 'spring', damping: 15 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.25 }}
                     onClick={handleAvatarClick}
                     onContextMenu={handleContextMenu}
                     onMouseDown={!isMobile ? handleDragStart : undefined}

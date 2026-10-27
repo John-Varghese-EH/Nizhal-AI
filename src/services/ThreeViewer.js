@@ -57,6 +57,9 @@ export class ThreeCanvasController {
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.setClearColor(0x000000, 0.0);
         this.renderer.autoClear = true;
+        this.renderer.autoClearColor = true;
+        this.renderer.autoClearDepth = true;
+        this.renderer.autoClearStencil = true;
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -98,6 +101,9 @@ export class ThreeCanvasController {
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(width, height, false);
+        if (this.vrm) {
+            this.fitModelToCamera(this.vrm);
+        }
     }
 
     async loadVRM(url) {
@@ -228,49 +234,44 @@ export class ThreeCanvasController {
     fitModelToCamera(vrm) {
         if (!vrm || !this.camera) return;
 
-        // Try to get actual head node position from humanoid bones
-        let headHeight = 1.45; // Generous fallback
-        try {
-            const headNode = vrm.humanoid?.getNormalizedBoneNode?.('head') || vrm.humanoid?.getRawBoneNode?.('head');
-            if (headNode) {
-                const worldPosition = new THREE.Vector3();
-                headNode.getWorldPosition(worldPosition);
-                if (worldPosition.y > 0.5 && worldPosition.y < 3.0) {
-                    headHeight = worldPosition.y;
-                }
-            }
-        } catch (e) {
-            console.warn('[ThreeCanvasController] Failed to resolve head bone node height, using fallback.');
-        }
+        // Compute exact bounding box of the loaded VRM
+        const bbox = new THREE.Box3().setFromObject(vrm.scene);
+        const size = new THREE.Vector3();
+        bbox.getSize(size);
+        const center = new THREE.Vector3();
+        bbox.getCenter(center);
 
-        // Stable camera and target focus setup with generous zoom-out margins.
-        // We set distance to a highly padded range and lower the focal target slightly
-        // towards the core torso center (Y = headHeight * 0.48), creating a solid safety margin 
-        // on the left, right, top, and bottom borders for high-energy skeletal movements.
-        const targetY = headHeight * 0.48; 
-        const distance = Math.max(headHeight * 1.72, 2.55); // Generous full-body padding margins
+        // Fallbacks if bounding box is unpopulated or invalid
+        const modelHeight = (size.y > 0.3 && size.y < 5.0) ? size.y : 1.45;
+        const centerY = (center.y > 0.2 && center.y < 3.0) ? center.y : (modelHeight * 0.5);
 
-        this.camera.position.set(0.0, headHeight * 0.64, distance);
-        this.camera.lookAt(new THREE.Vector3(0.0, targetY, 0.0));
+        // Fit ratio: ~86% of the window height so character fills the window with natural margins
+        const targetFillRatio = 0.86;
+        const aspect = this.camera.aspect || 1.0;
+        
+        // Calculate the required visible height in world units
+        const verticalFovRad = (this.camera.fov * Math.PI) / 180;
+        
+        // Fit both height and width safely with padding
+        const requiredHeight = modelHeight / targetFillRatio;
+        const requiredWidth = (size.x > 0.1 ? size.x : (modelHeight * 0.45)) / targetFillRatio;
+        
+        const distForHeight = (requiredHeight / 2) / Math.tan(verticalFovRad / 2);
+        const distForWidth = (requiredWidth / (2 * aspect)) / Math.tan(verticalFovRad / 2);
+        
+        const distance = Math.max(distForHeight, distForWidth);
+
+        // Focal point: center of the model (X=0, Y=centerY, Z=0)
+        // Camera positioned straight ahead looking at the model center
+        this.camera.position.set(0.0, centerY, distance);
+        this.camera.lookAt(new THREE.Vector3(0.0, centerY, 0.0));
+        this.camera.updateProjectionMatrix();
     }
 
     startLoop() {
-        let lastRenderTime = 0;
         const render = (time) => {
             this.animationFrameId = requestAnimationFrame(render);
             
-            // Green Engine: Dynamic FPS throttling
-            // Idle target: ~20-25fps (~40-50ms between frames) to conserve CPU/GPU
-            // Active target: 60fps (immediate render)
-            const isIdle = !this.vrm?.expressionManager?.getValue?.('aa') && 
-                           (!this.animationService || this.animationService.currentState === 'idle');
-            const targetInterval = isIdle ? 45 : 0; // ~22 FPS when idling, 60 FPS when active
-
-            if (targetInterval > 0 && time - lastRenderTime < targetInterval) {
-                return;
-            }
-            lastRenderTime = time;
-
             const delta = this.clock.getDelta();
             
             // FPS Diagnostics tracking
@@ -281,6 +282,9 @@ export class ThreeCanvasController {
                 this.lastFpsUpdate = time;
                 if (this.onFpsUpdate) this.onFpsUpdate(this.fps);
             }
+
+            const isIdle = !this.vrm?.expressionManager?.getValue?.('aa') && 
+                           (!this.animationService || this.animationService.currentState === 'idle');
 
             if (this.animationService) {
                 try {
@@ -304,6 +308,8 @@ export class ThreeCanvasController {
             }
 
             if (this.renderer && this.scene && this.camera) {
+                // Explicitly clear all buffers before render to prevent ghosting/frame accumulation
+                this.renderer.clear(true, true, true);
                 this.renderer.render(this.scene, this.camera);
             }
         };
