@@ -55,6 +55,7 @@ export class ThreeCanvasController {
         });
         this.renderer.setSize(width, height, false);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.renderer.setClearColor(0x000000, 0.0);
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -289,6 +290,15 @@ export class ThreeCanvasController {
             }
 
             if (this.vrm) {
+                // Natural weightless floating motion: subtle breathing oscillation
+                if (isIdle && this.vrm.scene) {
+                    const elapsed = this.clock.getElapsedTime();
+                    // Gentle vertical breathing wave (amplitude ~8mm, cycle ~3.2s)
+                    const hoverOffset = Math.sin(elapsed * 1.95) * 0.008;
+                    const subtleTilt = Math.sin(elapsed * 0.98) * 0.004;
+                    this.vrm.scene.position.y = hoverOffset;
+                    this.vrm.scene.rotation.z = subtleTilt;
+                }
                 this.vrm.update(delta);
             }
 
