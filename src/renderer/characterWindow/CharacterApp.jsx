@@ -857,6 +857,13 @@ const CharacterApp = () => {
             return;
         }
 
+        // Calculate avatar face/head coordinates (top-center area of character window)
+        const faceX = window.innerWidth / 2;
+        const faceY = Math.max(80, window.innerHeight * 0.22);
+        // Anchor burst near click position if clicked in upper body, otherwise directly at face
+        const burstX = e?.clientX ? (e.clientX * 0.6 + faceX * 0.4) : faceX;
+        const burstY = e?.clientY ? Math.min(e.clientY, faceY + 40) : faceY;
+
         // Single click: cute reactive poke / pet reaction based on persona!
         if (personalityMode === 'gf') {
             const cuteReactions = [
@@ -869,7 +876,7 @@ const CharacterApp = () => {
             setSpeechMessage(reaction);
             setIsSpeechVisible(true);
             expressionRef.current?.onEvent('happy');
-            particleRef.current?.burst('heart', window.innerWidth / 2, window.innerHeight / 2, 12);
+            particleRef.current?.burst('heart', burstX, burstY, 12);
         } else if (personalityMode === 'bf') {
             const cuteReactions = [
                 "I got your back, champ! Let's crush this. 💪",
@@ -881,7 +888,7 @@ const CharacterApp = () => {
             setSpeechMessage(reaction);
             setIsSpeechVisible(true);
             expressionRef.current?.onEvent('happy');
-            particleRef.current?.burst('spark', window.innerWidth / 2, window.innerHeight / 2, 12);
+            particleRef.current?.burst('spark', burstX, burstY, 12);
         } else if (personalityMode === 'jarvis') {
             const jarvisReactions = [
                 "All systems operational, Sir. At your command. ⚙️",
@@ -893,13 +900,13 @@ const CharacterApp = () => {
             setSpeechMessage(reaction);
             setIsSpeechVisible(true);
             expressionRef.current?.onEvent('thinking');
-            particleRef.current?.burst('spark', window.innerWidth / 2, window.innerHeight / 2, 8);
+            particleRef.current?.burst('spark', burstX, burstY, 8);
         } else {
             // Default friendly poke
             expressionRef.current?.onEvent('happy');
             setSpeechMessage("Hello! Double click me to chat! ✨");
             setIsSpeechVisible(true);
-            particleRef.current?.burst('spark', window.innerWidth / 2, window.innerHeight / 2, 8);
+            particleRef.current?.burst('spark', burstX, burstY, 8);
         }
     }, [personalityMode]);
 
@@ -909,10 +916,13 @@ const CharacterApp = () => {
         const cleanup = surpriseService.onSurprise((type, data) => {
             console.log('[CharacterApp] Surprise event:', type, data);
 
+            const faceX = window.innerWidth / 2;
+            const faceY = Math.max(80, window.innerHeight * 0.22);
+
             switch (type) {
                 case 'emote':
                     expressionRef.current?.onEvent(data);
-                    particleRef.current?.burst(data === 'love' ? 'heart' : 'spark', window.innerWidth / 2, window.innerHeight / 2, 10);
+                    particleRef.current?.burst(data === 'love' ? 'heart' : 'spark', faceX, faceY, 10);
                     break;
                 case 'message':
                     setSpeechMessage(data);
@@ -1021,9 +1031,11 @@ const CharacterApp = () => {
         await window.nizhal?.state?.set?.('ai.personalityMode', mode);
         console.log('[CharacterApp] Personality mode changed to:', mode);
 
-        // Visual feedback
+        // Visual feedback near face
+        const faceX = window.innerWidth / 2;
+        const faceY = Math.max(80, window.innerHeight * 0.22);
         const particleType = mode === 'gf' ? 'heart' : mode === 'bf' ? 'spark' : 'note';
-        particleRef.current?.burst(particleType, window.innerWidth / 2, window.innerHeight / 2, 15);
+        particleRef.current?.burst(particleType, faceX, faceY, 15);
     }, []);
 
     // Emotion trigger handler
@@ -1034,8 +1046,10 @@ const CharacterApp = () => {
         expressionRef.current?.onEvent(emotion);
         console.log('[CharacterApp] Emotion triggered:', emotion);
 
-        // Visual feedback
-        particleRef.current?.burst('spark', window.innerWidth / 2, window.innerHeight / 2, 5);
+        // Visual feedback near face
+        const faceX = window.innerWidth / 2;
+        const faceY = Math.max(80, window.innerHeight * 0.22);
+        particleRef.current?.burst('spark', faceX, faceY, 8);
     }, []);
 
     // Quick action handler

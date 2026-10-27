@@ -48,16 +48,15 @@ const SpeechBubble = ({
         const spaceLeft = rect.left;
         const spaceRight = window.innerWidth - rect.right;
 
-        // Choose main placement based on available space
+        // In character window, the character is centered and head is near the top
+        // Always place above the head with screen clamping so it never falls below the feet
         let newPlacement = 'above';
-        if (spaceAbove > 120) {
-            newPlacement = 'above';
-        } else if (spaceRight > 240) {
-            newPlacement = 'right';
-        } else if (spaceLeft > 240) {
+        if (spaceLeft > 240 && spaceAbove < 80) {
             newPlacement = 'left';
+        } else if (spaceRight > 240 && spaceAbove < 80) {
+            newPlacement = 'right';
         } else {
-            newPlacement = 'below';
+            newPlacement = 'above';
         }
 
         if (prevPlacementRef.current !== newPlacement) {
@@ -204,9 +203,9 @@ const SpeechBubble = ({
     const placementStyles = {
         above: {
             style: {
-                top: '-5%', // shifted above the canvas container border so it never overlaps the head
+                top: '14px', // Anchored near the top of the character viewport right above the head
                 left: '50%',
-                transform: `translate(calc(-50% + ${screenShift.x}px), calc(-100% - ${verticalGap}px + ${screenShift.y}px))`,
+                transform: `translate(calc(-50% + ${screenShift.x}px), ${screenShift.y}px)`,
             },
             tail: 'bottom-[-6px] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent'
         },

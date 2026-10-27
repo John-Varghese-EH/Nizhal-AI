@@ -83,28 +83,28 @@ const Particle = ({ type, x, y }) => {
     return (
         <motion.div
             initial={{
-                opacity: 1,
-                x: x - window.innerWidth / 2, // relative to center for simplicity or absolute?
-                y: y - window.innerHeight / 2,
-                scale: 0
+                opacity: 0,
+                x: 0,
+                y: 0,
+                scale: 0.2
             }}
-            // Actually, we are using absolute positioning in a full screen div, 
-            // so let's stick to absolute coordinates.
             style={{
                 position: 'absolute',
                 left: x,
                 top: y,
                 fontSize: '1.5rem',
-                color: config.color
+                color: config.color,
+                pointerEvents: 'none',
+                transformOrigin: 'center center'
             }}
             animate={{
-                opacity: 0,
-                x: x + endX,
-                y: y + endY,
-                scale: [0, 1.5, 0],
+                opacity: [0, 1, 1, 0],
+                x: endX,
+                y: endY,
+                scale: [0.2, 1.4, 1.1, 0.4],
                 rotate: rotate
             }}
-            transition={{ duration: 1.5, ease: "easeOut" }}
+            transition={{ duration: 1.4, ease: "easeOut" }}
         >
             {config.icon}
         </motion.div>
