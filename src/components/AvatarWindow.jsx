@@ -37,8 +37,14 @@ const AvatarWindow = ({ modelUrl, expression, isSpeaking, onLoad }) => {
             }
         };
 
+        // Expose controller globally for pixel hit testing across empty space vs avatar
+        window.__nizhalAvatarController = controller;
+
         // Complete unmount garbage collection cleanup
         return () => {
+            if (window.__nizhalAvatarController === controller) {
+                delete window.__nizhalAvatarController;
+            }
             if (controllerRef.current) {
                 controllerRef.current.dispose();
                 controllerRef.current = null;

@@ -238,6 +238,7 @@ pub async fn create_character_window(
         .skip_taskbar(true)
         .resizable(true)
         .shadow(false)
+        .visible(false)
         .build();
 
         match build_result {
@@ -314,29 +315,6 @@ pub async fn set_character_position(
     }
     #[cfg(not(desktop))]
     { let _ = (app, x, y); }
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn move_character_by(
-    app: tauri::AppHandle,
-    delta_x: i32,
-    delta_y: i32,
-) -> Result<(), String> {
-    #[cfg(desktop)]
-    {
-        if let Some(window) = app.get_webview_window("character") {
-            let current = window.outer_position().map_err(|e| e.to_string())?;
-            window
-                .set_position(tauri::Position::Physical(tauri::PhysicalPosition { 
-                    x: current.x + delta_x, 
-                    y: current.y + delta_y 
-                }))
-                .map_err(|e| e.to_string())?;
-        }
-    }
-    #[cfg(not(desktop))]
-    { let _ = (app, delta_x, delta_y); }
     Ok(())
 }
 

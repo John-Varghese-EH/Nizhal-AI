@@ -25,6 +25,30 @@ export class ThreeCanvasController {
         this.lastFpsUpdate = 0;
         this.frameCount = 0;
         this.onFpsUpdate = null;
+
+        // Interactive hit-testing (pixel raycaster)
+        this.raycaster = new THREE.Raycaster();
+        this.mouseVec = new THREE.Vector2();
+    }
+
+    /**
+     * Test if a client screen coordinate (clientX, clientY) hits the 3D model.
+     * Returns true if pointer intersects any mesh of the VRM model, false for empty space.
+     */
+    hitTestAt(clientX, clientY) {
+        if (!this.vrm || !this.vrm.scene || !this.camera || !this.canvas) return false;
+        const rect = this.canvas.getBoundingClientRect();
+        if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+            return false;
+        }
+
+        // Convert client pixels to Normalized Device Coordinates (-1 to +1)
+        this.mouseVec.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+        this.mouseVec.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+
+        this.raycaster.setFromCamera(this.mouseVec, this.camera);
+        const intersects = this.raycaster.intersectObject(this.vrm.scene, true);
+        return intersects.length > 0;
     }
 
     mount(container) {
@@ -45,20 +69,19 @@ export class ThreeCanvasController {
         const width = this.container.clientWidth || 300;
         const height = this.container.clientHeight || 400;
 
-        // Renderer: preserveDrawingBuffer: true ensures WebKitGTK / Wayland compositor
-        // does not blend uninitialized scratch buffers or retain stale frame artifacts.
+        // Renderer
         this.renderer = new THREE.WebGLRenderer({
             canvas: this.canvas,
             alpha: true,
             antialias: true,
-            preserveDrawingBuffer: true,
-            powerPreference: 'high-performance',
-            premultipliedAlpha: true
+            preserveDrawingBuffer: false,
+            powerPreference: 'high-performance'
         });
         this.renderer.setSize(width, height, false);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.setClearColor(0x000000, 0.0);
-        this.renderer.autoClear = false; // We do explicit triple clear on every frame
+        this.renderer.autoClear = true;
+        this.renderer.autoClearColor = true;
         this.renderer.autoClearDepth = true;
         this.renderer.autoClearStencil = true;
         this.renderer.shadowMap.enabled = true;
@@ -242,19 +265,18 @@ export class ThreeCanvasController {
         const center = new THREE.Vector3();
         bbox.getCenter(center);
 
-        // Exact center of the model in 3D world space
-        const centerX = center.x || 0.0;
+        // Fallbacks if bounding box is unpopulated or invalid
+        const modelHeight = (size.y > 0.3 && size.y < 5.0) ? size.y : 1.45;
         const centerY = (center.y > 0.2 && center.y < 3.0) ? center.y : (modelHeight * 0.5);
-        const centerZ = center.z || 0.0;
 
-        // Fit ratio: ~92% so character utilizes the full window size nicely without clipping
-        const targetFillRatio = 0.92;
+        // Fit ratio: ~86% of the window height so character fills the window with natural margins
+        const targetFillRatio = 0.86;
         const aspect = this.camera.aspect || 1.0;
         
         // Calculate the required visible height in world units
         const verticalFovRad = (this.camera.fov * Math.PI) / 180;
         
-        // Fit both height and width safely with balanced padding
+        // Fit both height and width safely with padding
         const requiredHeight = modelHeight / targetFillRatio;
         const requiredWidth = (size.x > 0.1 ? size.x : (modelHeight * 0.45)) / targetFillRatio;
         
@@ -263,10 +285,10 @@ export class ThreeCanvasController {
         
         const distance = Math.max(distForHeight, distForWidth);
 
-        // Focal point: exact center of the model (X=centerX, Y=centerY, Z=centerZ)
+        // Focal point: center of the model (X=0, Y=centerY, Z=0)
         // Camera positioned straight ahead looking at the model center
-        this.camera.position.set(centerX, centerY, centerZ + distance);
-        this.camera.lookAt(new THREE.Vector3(centerX, centerY, centerZ));
+        this.camera.position.set(0.0, centerY, distance);
+        this.camera.lookAt(new THREE.Vector3(0.0, centerY, 0.0));
         this.camera.updateProjectionMatrix();
     }
 

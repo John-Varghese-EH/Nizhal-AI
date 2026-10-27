@@ -429,6 +429,10 @@ const CharacterApp = () => {
             setTimeout(updateSize, 500),
             setTimeout(updateSize, 1000),
             setTimeout(updateSize, 2000),
+            // Fallback: Ensure window is revealed even if VRM load is delayed
+            setTimeout(() => {
+                window.nizhal?.character?.show?.();
+            }, 2500),
             // Force a resize event after a slight delay to ensure canvas catches up
             setTimeout(() => window.dispatchEvent(new Event('resize')), 1500)
         ];
@@ -633,19 +637,46 @@ const CharacterApp = () => {
             }
         };
 
-        // Also check on mouse events in case keydown was missed
+        // Dynamic Pixel Raycast Hit-Testing:
+        // Automatically allow click-through where the 3D model is NOT present (empty space)
+        // When pointer hovers over the 3D character mesh or speech bubbles/menu, interaction is enabled.
         const handleMouseMove = (e) => {
-            if (e.altKey && !altKeyDown) {
+            if (isDragging || contextMenuOpen || customizerOpen) {
+                if (altKeyDown) return;
+                window.nizhal?.character?.setClickThrough?.(false);
+                return;
+            }
+
+            if (e.altKey) {
                 enableInteraction();
-            } else if (!e.altKey && altKeyDown && !isDragging) {
-                disableInteraction();
+                return;
+            }
+
+            // Check if cursor is hovering over an interactive UI element
+            const hoveredEl = document.elementFromPoint(e.clientX, e.clientY);
+            const isHoveringUI = hoveredEl && (
+                hoveredEl.closest('button, input, select, textarea, [role="button"], .speech-bubble, .menu-container, .interactive-ui') !== null
+            );
+
+            // Raycast against the 3D VRM model meshes
+            const controller = window.__nizhalAvatarController;
+            const isHoveringModel = controller?.hitTestAt ? controller.hitTestAt(e.clientX, e.clientY) : true;
+
+            const shouldInteract = isHoveringUI || isHoveringModel;
+
+            if (shouldInteract) {
+                // Pointer is on the character model or UI -> Enable interaction/clicking/dragging
+                window.nizhal?.character?.setClickThrough?.(false);
+            } else {
+                // Pointer is on transparent/empty canvas space -> Allow click-through to background apps
+                window.nizhal?.character?.setClickThrough?.(true);
             }
         };
 
-        // When mouse leaves window, reset to click-through only if user explicitly enabled click-through lock
+        // When mouse leaves window, reset to click-through so user can interact with background apps freely
         const handleMouseLeave = () => {
-            if (uiSettings.clickThrough && !contextMenuOpen && !customizerOpen && !isDragging) {
-                disableInteraction();
+            if (!contextMenuOpen && !customizerOpen && !isDragging) {
+                window.nizhal?.character?.setClickThrough?.(true);
             }
         };
 
@@ -907,48 +938,27 @@ const CharacterApp = () => {
         };
     }, [isScreensaver]);
 
-    // Drag handlers — Moves the OS companion window when dragged (or with Alt+Drag)
-    const dragOriginRef = useRef({ screenX: 0, screenY: 0 });
-    const isDraggingRef = useRef(false);
-
+    // Drag handlers — moves the 3D model WITHIN the full-screen canvas
+    // Native OS window drag handler
     const handleDragStart = useCallback((e) => {
         if (e.button !== 0) return;
         if (e.target.closest('button, input, select, textarea, [role="button"], .speech-bubble, .menu-container')) {
             return;
         }
-
-        isDraggingRef.current = true;
-        dragOriginRef.current = { screenX: e.screenX, screenY: e.screenY };
         setIsDragging(true);
         expressionRef.current?.setDragging(true);
         getAvatarStateController().setState(AvatarState.DRAGGING);
-
-        // Native Tauri window dragging: moves the OS window smoothly on Wayland/X11/Windows
-        try {
-            window.nizhal?.window?.startDragging?.();
-        } catch (err) {
-            console.warn('[CharacterApp] Native startDragging failed, relying on fallback delta drag:', err);
-        }
+        window.nizhal?.window?.startDragging?.();
     }, []);
 
-    const handleDrag = useCallback((e) => {
-        if (!isDraggingRef.current) return;
-        // Pointer delta fallback for compositors that do not support native startDragging
-        const deltaX = e.screenX - dragOriginRef.current.screenX;
-        const deltaY = e.screenY - dragOriginRef.current.screenY;
-        if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
-            dragOriginRef.current = { screenX: e.screenX, screenY: e.screenY };
-            window.nizhal?.window?.moveCharacterBy?.(deltaX, deltaY);
-        }
+    const handleDrag = useCallback(() => {
+        // OS native drag handles position tracking
     }, []);
 
     const handleDragEnd = useCallback(() => {
-        if (isDraggingRef.current) {
-            isDraggingRef.current = false;
-            setIsDragging(false);
-            expressionRef.current?.setDragging(false);
-            getAvatarStateController().setState(AvatarState.IDLE);
-        }
+        setIsDragging(false);
+        expressionRef.current?.setDragging(false);
+        getAvatarStateController().setState(AvatarState.IDLE);
     }, []);
 
     // Wheel resize handler
@@ -1191,7 +1201,11 @@ const CharacterApp = () => {
                                 modelUrl={currentCharacter.model}
                                 expression={currentEmotion === 'thinking' ? 'thinking' : currentEmotion}
                                 isSpeaking={avatarState.isSpeaking}
-                                onLoad={() => setVrmLoaded(true)}
+                                onLoad={() => {
+                                    setVrmLoaded(true);
+                                    // Window now has transparent frame rendered — show window smoothly
+                                    window.nizhal?.character?.show?.();
+                                }}
                             />
                             <SpeechBubble
                                 message={speechMessage}

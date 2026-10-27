@@ -5,9 +5,12 @@ fn main() {
     #[cfg(target_os = "linux")]
     {
         // Fix for WebKitGTK transparency and composite buffer rendering on Wayland compositors (Niri, Hyprland, Sway)
-        // Ensures WebKitGTK visual channel uses an alpha channel without DMABUF buffer corruption
+        // Ensures WebKitGTK visual channel uses an alpha channel without DMABUF buffer corruption or opaque solid backings
         if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+        if std::env::var("WEBKIT_DISABLE_COMPOSITING_MODE").is_err() {
+            std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
         }
     }
 

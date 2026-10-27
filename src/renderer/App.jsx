@@ -171,10 +171,9 @@ const App = () => {
 
             if (!prefs?.onboardingComplete) setShowOnboarding(true);
 
-            // Launch transparent companion window always
+            // Launch transparent companion window (it will show itself once rendered to prevent blank/opaque flashes)
             if (window.nizhal?.character?.create) {
                 await window.nizhal.character.create();
-                await window.nizhal.character.show();
             }
         } catch (error) {
             console.error('Failed to initialize:', error);
